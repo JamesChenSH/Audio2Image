@@ -159,15 +159,16 @@ class DecoderTransformerBlock(nn.Module):
     
     def forward(
         self, 
-        x:torch.Tensor):
+        decoder_x:torch.Tensor,
+        encoder_x:torch.Tensor):
         # Post Layer Add&Norm as in original Transformer Paper
         
         # Self Multihead Attention
-        self_attention_output, self_attention_score = self.selfAttention(x, x, x, need_weights=self.need_weights)
+        self_attention_output, self_attention_score = self.selfAttention(decoder_x, decoder_x, decoder_x, need_weights=self.need_weights)
         # Layer Normalization
-        self_attention_layer_norm_output = self.layerNorm1(self.selfAttentionDropout(self_attention_output) + x)
+        self_attention_layer_norm_output = self.layerNorm1(self.selfAttentionDropout(self_attention_output) + decoder_x)
         # Cross Multihead Attention
-        cross_attention_output, cross_attention_score = self.crossAttention(self_attention_layer_norm_output, x, x, need_weights=self.need_weights)
+        cross_attention_output, cross_attention_score = self.crossAttention(decoder_x, encoder_x, encoder_x, need_weights=self.need_weights)
         # Layer Normalization
         cross_attention_layer_norm_output = self.layerNorm2(self.crossAttentionDropout(cross_attention_output) + self_attention_layer_norm_output)
         # Feed Forward
@@ -227,12 +228,14 @@ class TransformerEncoder(nn.Module):
 class TransformerDecoder(nn.Module):
     def __init__(
         self, 
+        img_depth:int,
         embedding_dim:int, 
         head_num:int, 
         ff_dim:int, 
         dropout_rate:float, 
         attn_dropout:float, 
-        num_dec_layers:int
+        num_dec_layers:int,
+        use_log_softmax:bool=False
         ) -> None:
         super(TransformerDecoder, self).__init__()
         # Decoder Layers
@@ -243,15 +246,19 @@ class TransformerDecoder(nn.Module):
                 self.layers.append(DecoderTransformerBlock(embedding_dim, head_num, ff_dim, dropout_rate, attn_dropout, need_weights=True))
             else:
                 self.layers.append(DecoderTransformerBlock(embedding_dim, head_num, ff_dim, dropout_rate, attn_dropout))
+                
+        self.linearLayer = DecoderLinearLayer(embedding_dim, img_depth, use_log_softmax)
     
     def forward(
         self, 
-        x:torch.Tensor
+        decoder_x:torch.Tensor,
+        encoder_x:torch.Tensor
         ):
-        x = self.layerNorm(x)
+        decoder_x = self.layerNorm(decoder_x)
         for layer in self.layers:
-            x = layer(x)
-        return x
+            decoder_x = layer(decoder_x, encoder_x)
+        decoder_x = self.linearLayer(decoder_x)
+        return decoder_x
 
 
 # Post Decoder Linear Layers
@@ -260,11 +267,11 @@ class DecoderLinearLayer(nn.Module):
     def __init__(
         self, 
         embedding_dim:int, 
-        spectrum_range:float,
+        out_dimension:float,
         use_log_softmax:bool=False
         ) -> None:
         super(DecoderLinearLayer, self).__init__()
-        self.linear = nn.Linear(embedding_dim, spectrum_range)
+        self.linear = nn.Linear(embedding_dim, out_dimension)
         self.use_log_softmax = use_log_softmax
         
     def forward(
@@ -281,7 +288,7 @@ class DecoderLinearLayer(nn.Module):
 class Audio2ImageModel(nn.Module):
     def __init__(
         self, 
-        img_depth:int, 
+        audio_depth:int, 
         embedding_dim:int, 
         encoder_head_num:int, 
         decoder_head_num:int,
@@ -293,26 +300,45 @@ class Audio2ImageModel(nn.Module):
         decoder_attn_dropout:float, 
         num_enc_layers:int, 
         num_dec_layers:int, 
-        spectrum_range:int, 
-        use_log_softmax:bool=False
+        img_depth:int=256
         ) -> None:
         super(Audio2ImageModel, self).__init__()
         
-        self.x_pe = positional_encoding_sinusoidal(embedding_dim)
-        self.embeddingLayer = TransformerEmbedding(img_depth, embedding_dim)
-        self.encoder = TransformerEncoder(embedding_dim, encoder_head_num, encoder_ff_dim, encoder_dropout_rate, encoder_attn_dropout, num_enc_layers)
-        self.decoder = TransformerDecoder(embedding_dim, decoder_head_num, decoder_ff_dim, decoder_dropout_rate, decoder_attn_dropout, num_dec_layers)
-        self.linearLayer = DecoderLinearLayer(embedding_dim, spectrum_range, use_log_softmax)
+        self.aud_pe = positional_encoding_sinusoidal(embedding_dim)  
+        self.img_pe = positional_encoding_sinusoidal(embedding_dim)    
         
+        self.audio_embedding = TransformerEmbedding(audio_depth, embedding_dim)             # [batch_size, aud_len, embedding_dim]
+        self.img_embedding = TransformerEmbedding(img_depth, embedding_dim)                 # [batch_size, img_len, embedding_dim]
+        
+        self.encoder = TransformerEncoder(embedding_dim, encoder_head_num, encoder_ff_dim, encoder_dropout_rate, encoder_attn_dropout, num_enc_layers) 
+        self.decoder = TransformerDecoder(img_depth, embedding_dim, decoder_head_num, decoder_ff_dim, decoder_dropout_rate, decoder_attn_dropout, num_dec_layers)
+        
+    
+    def get_audio_embedding(self, aud):
+        aud_emb = self.audio_embedding(aud)
+        if self.aud_pe is not None:
+            aud_emb += self.aud_pe[:, :aud.size(1)].requires_grad(False)
+        return aud_emb
+    
+    
+    def get_img_embedding(self, img):
+        img_emb = self.img_embedding(img)
+        if self.img_pe is not None:
+            img_emb += self.img_pe[:, :img.size(1)].requires_grad(False)
+        return img_emb
+        
+    
     def forward(
         self, 
-        x:torch.Tensor
+        input_tokens:torch.Tensor,
+        output_tokens:torch.Tensor
         ):
         # embed the image to vectors
-        x = self.embeddingLayer(x)
+        encoder_x = self.audio_embedding(input_tokens)
         # apply positional encoding
-        x += self.x_pe[:, :x.size(1)].requires_grad(False)
-        x = self.encoder(x)
-        x = self.decoder(x)
-        x = self.linearLayer(x)
-        return x
+        decoder_x = self.img_embedding(output_tokens)
+        
+        encoded_src = self.encoder(encoder_x)
+        decoded_val = self.decoder(decoder_x, encoded_src)
+        
+        return decoded_val
