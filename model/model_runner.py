@@ -101,14 +101,15 @@ class Audio2Image():
             self.model.train()
             
             total_loss = 0
-            
+            print(f"== *Training Epoch: {epoch}, Device: {self.device}* ==")
+
             for batch, (audio, img) in enumerate(training_dataloader):
                 audio = audio.to(self.device)
                 img = img.to(self.device)
                 
                 self.optimizer.zero_grad()
-                output = self.model(audio)
-                loss = self.criterion(output, img)
+                output = self.model(audio, img[:, :-1])
+                loss = self.criterion(output, img[:, 1:])
                 self.optimizer.step()
                 self.scheduler.step(loss)
                 total_loss += loss.item()
@@ -116,9 +117,7 @@ class Audio2Image():
                 loss /= batch_size
                 loss.backward()
             
-            print(f"Training Epoch: {epoch}, Loss: {total_loss}, Device: {self.device}")
-            
-            
+            print(f"== Loss: {total_loss}, Device: {self.device}")
             
             self.model.eval()
             
@@ -129,7 +128,7 @@ class Audio2Image():
                     # TODO
                     pass
             
-            print(f"Validation Epoch: {epoch}, Loss: {val_loss}, Device: {self.device}")
+            print(f"== Loss: {val_loss}, Device: {self.device}")
             
     def test(
         self,
