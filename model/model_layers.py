@@ -32,19 +32,19 @@ def positional_encoding_sinusoidal(
 
 # TODO: Embedding
 
-# We Embned the image inputs into 512 dimensions to fit into the model. 
+# We Embned the image inputs into 12 dimensions to fit into the model. 
 # Then we apply a positional encoding to the image embeddings for the 
 # entire sequence using cos sin.
 class TransformerEmbedding(nn.Module):
     def __init__(
         self, 
-        img_depth:int=5, 
+        input_depth:int=5, 
         embedding_dim:int=12
         ):
         super().__init__()
-        self.img_dim = img_depth
+        self.input_depth = input_depth
         self.model_dim = embedding_dim
-        self.embeddingLayer = nn.Linear(img_depth, embedding_dim)
+        self.embeddingLayer = nn.Linear(input_depth, embedding_dim)
         
     def forward(
         self, 
@@ -73,10 +73,7 @@ class FeedForwardLayer(nn.Module):
         else:
             raise ValueError("Invalid activation function")
         
-    def forward(
-        self, 
-        x: torch.Tensor
-        ):
+    def forward(self, x: torch.Tensor):
         x = self.dropout1(self.activation(self.dense1(x)))
         x = self.dropout2(self.dense2(x))
         return x
@@ -104,14 +101,19 @@ class EncoderTransformerBlock(nn.Module):
         self.attention_score = None
     
     
-    def forward(
-        self, 
-        x:torch.Tensor):
-        # Post Layer Add&Norm as in original Transformer Paper
+    def forward(self, x:torch.Tensor, src_mask:torch.Tensor=None):
+        """ 
+        Post Layer Add&Norm as in original Transformer Paper
+        
+        x: Input tensor [batch_size, src_len, embedding_dim]
+        src_mask: Mask for the input tensor [batch_size, src_len]
+        
+        Return: Output tensor [batch_size, src_len, embedding_dim]
+        """
         
         # Self Multihead Attention
         # Q,K,V = x for self attention.
-        attention_output, attention_score = self.selfAttention(x, x, x, need_weights=self.need_weights)
+        attention_output, attention_score = self.selfAttention(x, x, x, need_weights=self.need_weights, attn_mask=src_mask)
         # Layer Normalization
         attn_layer_norm_output = self.layerNorm1(self.attnDropout(attention_output) + x)
         # Feed Forward
@@ -157,18 +159,23 @@ class DecoderTransformerBlock(nn.Module):
         self.self_attention_score = None
         self.cross_attention_score = None
     
-    def forward(
-        self, 
-        decoder_x:torch.Tensor,
-        encoder_x:torch.Tensor):
-        # Post Layer Add&Norm as in original Transformer Paper
+    def forward(self, decoder_x:torch.Tensor, encoder_x:torch.Tensor, encoder_mask: torch.Tensor):
+        """ 
+        Post Layer Add&Norm as in original Transformer Paper 
         
-        # Self Multihead Attention
-        self_attention_output, self_attention_score = self.selfAttention(decoder_x, decoder_x, decoder_x, need_weights=self.need_weights)
+        decoder_x: decoder input sequence [batch_size, tgt_len, embedding_dim]
+        encoder_x: encoder input sequence [batch_size, src_len, embedding_dim]
+        
+        Return: Output tensor [batch_size, tgt_len, embedding_dim]
+        
+        """
+        
+        # Self Attention - Use causal mask
+        self_attention_output, self_attention_score = self.selfAttention(decoder_x, decoder_x, decoder_x, need_weights=self.need_weights, is_causal=True)
         # Layer Normalization
         self_attention_layer_norm_output = self.layerNorm1(self.selfAttentionDropout(self_attention_output) + decoder_x)
-        # Cross Multihead Attention
-        cross_attention_output, cross_attention_score = self.crossAttention(decoder_x, encoder_x, encoder_x, need_weights=self.need_weights)
+        # Cross Attention - Use padding mask
+        cross_attention_output, cross_attention_score = self.crossAttention(decoder_x, encoder_x, encoder_x, need_weights=self.need_weights, attn_mask=encoder_mask)
         # Layer Normalization
         cross_attention_layer_norm_output = self.layerNorm2(self.crossAttentionDropout(cross_attention_output) + self_attention_layer_norm_output)
         # Feed Forward
@@ -209,22 +216,29 @@ class TransformerEncoder(nn.Module):
             else:
                 self.layers.append(EncoderTransformerBlock(embedding_dim, head_num, ff_dim, dropout_rate, attn_dropout))
         
-    def forward(
-        self, 
-        x:torch.Tensor):
+    def forward(self, x:torch.Tensor, src_mask:torch.Tensor=None):
+        """
+        x: Input sequence                        [batch_size, src_len, embedding_dim]
+        src_mask: Padding Mask for the input     [batch_size, src_len]
+        
+        Return : Output tensor                   [batch_size, src_len, embedding_dim]
+        """
+        
         x = self.layerNorm(x)
         for layer in self.encoderLayers:
-            x = layer(x)
+            x = layer(x, src_mask)
         return x
 
     def get_attention_scores(self):
-        # Get the attention scores from the last layer
+        """ 
+        Get the attention scores from the last layer
+        """
         return self.layers[-1].get_attention_scores()
     
     
     
 # TODO: Decoder
-# Need to apply positional encoding to the spectrum embeddings as well
+# Need to apply positional encoding to the target embeddings as well
 class TransformerDecoder(nn.Module):
     def __init__(
         self, 
@@ -249,11 +263,14 @@ class TransformerDecoder(nn.Module):
                 
         self.linearLayer = DecoderLinearLayer(embedding_dim, img_depth, use_log_softmax)
     
-    def forward(
-        self, 
-        decoder_x:torch.Tensor,
-        encoder_x:torch.Tensor
-        ):
+    
+    def forward(self, decoder_x:torch.Tensor, encoder_x:torch.Tensor):
+        """
+        decoder_x: Decoder input  [batch_size, tgt_len, embedding_dim]
+        encoder_x: Encoder output [batch_size, src_len, embedding_dim]
+        
+        Return: generated output  [batch_size, tgt_len, img_depth]
+        """
         decoder_x = self.layerNorm(decoder_x)
         for layer in self.layers:
             decoder_x = layer(decoder_x, encoder_x)
@@ -274,11 +291,7 @@ class DecoderLinearLayer(nn.Module):
         self.linear = nn.Linear(embedding_dim, out_dimension)
         self.use_log_softmax = use_log_softmax
         
-    def forward(
-        self, 
-        x:torch.Tensor
-        ):
-        # Output vector should point to a value for a certain spectrum wavelength
+    def forward(self, x:torch.Tensor):
         if self.use_log_softmax:
             return nn.functional.log_softmax(self.linear(x), dim=-1)
         return self.linear(x)
@@ -310,11 +323,32 @@ class Audio2ImageModel(nn.Module):
         self.audio_embedding = TransformerEmbedding(audio_depth, embedding_dim)             # [batch_size, aud_len, embedding_dim]
         self.img_embedding = TransformerEmbedding(img_depth, embedding_dim)                 # [batch_size, img_len, embedding_dim]
         
-        self.encoder = TransformerEncoder(embedding_dim, encoder_head_num, encoder_ff_dim, encoder_dropout_rate, encoder_attn_dropout, num_enc_layers) 
-        self.decoder = TransformerDecoder(img_depth, embedding_dim, decoder_head_num, decoder_ff_dim, decoder_dropout_rate, decoder_attn_dropout, num_dec_layers)
+        self.encoder = TransformerEncoder(
+            embedding_dim, 
+            encoder_head_num, 
+            encoder_ff_dim, 
+            encoder_dropout_rate, 
+            encoder_attn_dropout, 
+            num_enc_layers)
+         
+        self.decoder = TransformerDecoder(
+            img_depth, 
+            embedding_dim, 
+            decoder_head_num, 
+            decoder_ff_dim, 
+            decoder_dropout_rate, 
+            decoder_attn_dropout, 
+            num_dec_layers)
         
     
     def get_audio_embedding(self, aud):
+        """
+        Generate embeddings map for audio input
+        
+        aud: Audio input [batch_size, aud_len, audio_depth]
+        
+        Return: Audio embeddings [batch_size, aud_len, embedding_dim]
+        """
         aud_emb = self.audio_embedding(aud)
         if self.aud_pe is not None:
             aud_emb += self.aud_pe[:, :aud.size(1)].requires_grad(False)
@@ -322,23 +356,35 @@ class Audio2ImageModel(nn.Module):
     
     
     def get_img_embedding(self, img):
+        """
+        Generate embeddings map for image output
+        
+        img: Image input [batch_size, img_len, img_depth]
+        
+        Return: Image embeddings [batch_size, img_len, embedding_dim]
+        """
         img_emb = self.img_embedding(img)
         if self.img_pe is not None:
             img_emb += self.img_pe[:, :img.size(1)].requires_grad(False)
         return img_emb
         
     
-    def forward(
-        self, 
-        input_tokens:torch.Tensor,
-        output_tokens:torch.Tensor
-        ):
-        # embed the image to vectors
-        encoder_x = self.audio_embedding(input_tokens)
-        # apply positional encoding
-        decoder_x = self.img_embedding(output_tokens)
+    def forward(self, input_tokens:torch.Tensor, output_tokens:torch.Tensor):
+        '''
+        input_tokens: Audio tokens [batch_size, aud_len, audio_depth]
+        output_tokens: Image tokens [batch_size, img_len, img_depth]
         
-        encoded_src = self.encoder(encoder_x)
-        decoded_val = self.decoder(decoder_x, encoded_src)
+        return: Image tokens [batch_size, img_len, img_depth]
+        '''
+        # embed the image to vectors
+        encoder_x = self.get_audio_embedding(input_tokens)
+        # apply positional encoding
+        decoder_x = self.get_img_embedding(output_tokens)
+        
+        # Create padding mask for src
+        src_mask = (input_tokens == 0).unsqueeze(1)
+        
+        encoded_src = self.encoder(encoder_x, src_mask)
+        decoded_val = self.decoder(decoder_x, encoded_src, src_mask)
         
         return decoded_val

@@ -13,7 +13,6 @@ class Audio2Image():
         dataset:torch.utils.data.Dataset,
         audio_depth:int = 5,
         img_depth:int = 3, 
-        
         device:str = 'cpu',
         embedding_dim:int = 32, 
         encoder_head_num:int = 2, 
@@ -108,7 +107,9 @@ class Audio2Image():
                 img = img.to(self.device)
                 
                 self.optimizer.zero_grad()
+                # Input a shifted out_image to model as well as input audio
                 output = self.model(audio, img[:, :-1])
+                # Outputs a predicted image
                 loss = self.criterion(output, img[:, 1:])
                 self.optimizer.step()
                 self.scheduler.step(loss)
