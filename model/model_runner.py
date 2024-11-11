@@ -5,27 +5,66 @@ import tqdm
 
 from typing import List
 
-from .model_layers import Audio2ImageModel
+from model_layers import Audio2ImageModel
 
 class Audio2Image():
     
     def __init__(self, 
         dataset:torch.utils.data.Dataset,
         audio_depth:int = 5,
-        img_depth:int = 3, 
+        img_depth:int = 256, 
         device:str = 'cpu',
-        embedding_dim:int = 32, 
+        embedding_dim:int = 1024, 
         encoder_head_num:int = 2, 
         decoder_head_num:int = 2,
-        encoder_ff_dim:int = 128, 
-        decoder_ff_dim:int = 128,
+        encoder_ff_dim:int = 4*1024, 
+        decoder_ff_dim:int = 4*1024,
         encoder_dropout_rate:float = 0.1, 
         decoder_dropout_rate:float = 0.1,
         encoder_attn_dropout:float = 0.0,
         decoder_attn_dropout:float = 0.0, 
-        num_enc_layers:int = 2, 
-        num_dec_layers:int = 3, 
+        num_enc_layers:int = 6, 
+        num_dec_layers:int = 6, 
     ):
+        """
+        This is the main model for the Audio 2 Image project. We only need to build this once
+        in the training script. The hyperparameters are set to default similar to that of GPT-2.
+        
+        With the defualt settings, there are 176,893,184 parameters in the model with FP32 precision, 
+        requiring around 10-12 GB of memory on a GPU with batch size 32.
+        
+        Parameters:
+        audio_depth: int
+            Depth of the audio data, range [TBD]
+        img_depth: int
+            Depth of the image data, range [0, 255]
+        dataset: torch.utils.data.Dataset
+            Vision and audio dataset in torch format, one to one
+        device: str
+            Device to run the model on, either 'cuda' or 'cpu' or 'mps'
+        embedding_dim: int
+            Dimension of the embedding
+        encoder_head_num: int
+            Number of Multi-Head-Attention heads in the encoder
+        decoder_head_num: int
+            Number of MH-Attention heads in the decoder
+        encoder_ff_dim: int
+            Dimension of the feed forward layer in the encoder
+        decoder_ff_dim: int
+            Dimension of the ff layer in the decoder
+        encoder_dropout_rate: float
+            FF layer dropout rate in the encoder
+        decoder_dropout_rate: float
+            FF layer dropout rate in the decoder
+        encoder_attn_dropout: float
+            Attention dropout rate in the encoder
+        decoder_attn_dropout: float
+            Attention dropout rate in the decoder
+        num_enc_layers: int
+            Number of encoder layers
+        num_dec_layers: int
+            Number of decoder layers
+        """
         self.audio_depth = audio_depth
         self.img_depth = img_depth
         self.dataset = dataset
@@ -96,11 +135,13 @@ class Audio2Image():
         self.model.to(self.device)
         self.criterion.to(self.device)
         
+        passed_epochs = 0
+        
         for epoch in self.epochs:
             self.model.train()
             
             total_loss = 0
-            print(f"== *Training Epoch: {epoch}, Device: {self.device}* ==")
+            print(f"== Epoch: {epoch}, Device: {self.device} ==")
 
             for batch, (audio, img) in enumerate(training_dataloader):
                 audio = audio.to(self.device)
@@ -118,7 +159,7 @@ class Audio2Image():
                 loss /= batch_size
                 loss.backward()
             
-            print(f"== Loss: {total_loss}, Device: {self.device}")
+            print(f"== Training Loss: {total_loss}, Device: {self.device}")
             
             self.model.eval()
             
@@ -126,10 +167,13 @@ class Audio2Image():
             
             with torch.no_grad():
                 for i, (audio, img) in enumerate(val_dataloader):
-                    # TODO
+                    # TODO: 
+                    # Need to compare the predicted image with the actual image with some function
                     pass
+                    
+                    
             
-            print(f"== Loss: {val_loss}, Device: {self.device}")
+            print(f"== Validation Loss: {val_loss}, Device: {self.device}")
             
     def test(
         self,
@@ -151,5 +195,8 @@ class Audio2Image():
         
         print(f"Test Loss: {test_loss}, Device: {self.device}")     
         
-            
-            
+if __name__ == "__main__":
+
+    model = Audio2Image(dataset=None)
+    total_params = sum(p.numel() for p in model.model.parameters())
+    print(f"Number of parameters: {total_params}")

@@ -23,6 +23,7 @@ def positional_encoding_sinusoidal(
     pe = torch.zeros(seq_len, model_dim)
     position = torch.arange(0, seq_len).unsqueeze(1)
     div_term = torch.exp(torch.arange(0, model_dim, 2) * -(math.log(temp) / model_dim))
+    
     pe[:, 0::2] = torch.sin(position * div_term)
     pe[:, 1::2] = torch.cos(position * div_term)
     return pe.unsqueeze(0)
@@ -159,7 +160,7 @@ class DecoderTransformerBlock(nn.Module):
         self.self_attention_score = None
         self.cross_attention_score = None
     
-    def forward(self, decoder_x:torch.Tensor, encoder_x:torch.Tensor, encoder_mask: torch.Tensor):
+    def forward(self, decoder_x:torch.Tensor, decoder_mask: torch.Tensor, encoder_x:torch.Tensor, encoder_mask: torch.Tensor):
         """ 
         Post Layer Add&Norm as in original Transformer Paper 
         
@@ -171,7 +172,7 @@ class DecoderTransformerBlock(nn.Module):
         """
         
         # Self Attention - Use causal mask
-        self_attention_output, self_attention_score = self.selfAttention(decoder_x, decoder_x, decoder_x, need_weights=self.need_weights, is_causal=True)
+        self_attention_output, self_attention_score = self.selfAttention(decoder_x, decoder_x, decoder_x, need_weights=self.need_weights, attn_mask=decoder_mask)
         # Layer Normalization
         self_attention_layer_norm_output = self.layerNorm1(self.selfAttentionDropout(self_attention_output) + decoder_x)
         # Cross Attention - Use padding mask
@@ -216,7 +217,7 @@ class TransformerEncoder(nn.Module):
             else:
                 self.layers.append(EncoderTransformerBlock(embedding_dim, head_num, ff_dim, dropout_rate, attn_dropout))
         
-    def forward(self, x:torch.Tensor, src_mask:torch.Tensor=None):
+    def forward(self, src_x:torch.Tensor, src_mask:torch.Tensor=None):
         """
         x: Input sequence                        [batch_size, src_len, embedding_dim]
         src_mask: Padding Mask for the input     [batch_size, src_len]
@@ -224,10 +225,10 @@ class TransformerEncoder(nn.Module):
         Return : Output tensor                   [batch_size, src_len, embedding_dim]
         """
         
-        x = self.layerNorm(x)
+        src_x = self.layerNorm(src_x)
         for layer in self.encoderLayers:
-            x = layer(x, src_mask)
-        return x
+            src_x = layer(src_x, src_mask)
+        return src_x
 
     def get_attention_scores(self):
         """ 
@@ -242,7 +243,7 @@ class TransformerEncoder(nn.Module):
 class TransformerDecoder(nn.Module):
     def __init__(
         self, 
-        img_depth:int,
+        img_range:int,
         embedding_dim:int, 
         head_num:int, 
         ff_dim:int, 
@@ -261,25 +262,24 @@ class TransformerDecoder(nn.Module):
             else:
                 self.layers.append(DecoderTransformerBlock(embedding_dim, head_num, ff_dim, dropout_rate, attn_dropout))
                 
-        self.linearLayer = DecoderLinearLayer(embedding_dim, img_depth, use_log_softmax)
+        self.linearLayer = DecoderLinearLayer(embedding_dim, img_range, use_log_softmax)
     
     
-    def forward(self, decoder_x:torch.Tensor, encoder_x:torch.Tensor):
+    def forward(self, decoder_x:torch.Tensor, decoder_mask:torch.Tensor, encoder_x:torch.Tensor, encoder_mask:torch.Tensor):
         """
         decoder_x: Decoder input  [batch_size, tgt_len, embedding_dim]
         encoder_x: Encoder output [batch_size, src_len, embedding_dim]
         
-        Return: generated output  [batch_size, tgt_len, img_depth]
+        Return: generated output  [batch_size, tgt_len, img_range]
         """
         decoder_x = self.layerNorm(decoder_x)
         for layer in self.layers:
-            decoder_x = layer(decoder_x, encoder_x)
+            decoder_x = layer(decoder_x, decoder_mask, encoder_x, encoder_mask)
         decoder_x = self.linearLayer(decoder_x)
         return decoder_x
 
 
 # Post Decoder Linear Layers
-# Linearly map model output to spectrum values
 class DecoderLinearLayer(nn.Module):
     def __init__(
         self, 
@@ -302,6 +302,7 @@ class Audio2ImageModel(nn.Module):
     def __init__(
         self, 
         audio_depth:int, 
+        img_depth: int,
         embedding_dim:int, 
         encoder_head_num:int, 
         decoder_head_num:int,
@@ -313,9 +314,15 @@ class Audio2ImageModel(nn.Module):
         decoder_attn_dropout:float, 
         num_enc_layers:int, 
         num_dec_layers:int, 
-        img_depth:int=256
+        sos_token:int=256,
+        eos_token:int=257,
+        pad_token:int=258
         ) -> None:
         super(Audio2ImageModel, self).__init__()
+        
+        self.sos_token = sos_token
+        self.eos_token = eos_token
+        self.pad_token = pad_token
         
         self.aud_pe = positional_encoding_sinusoidal(embedding_dim)  
         self.img_pe = positional_encoding_sinusoidal(embedding_dim)    
@@ -332,7 +339,7 @@ class Audio2ImageModel(nn.Module):
             num_enc_layers)
          
         self.decoder = TransformerDecoder(
-            img_depth, 
+            img_depth,
             embedding_dim, 
             decoder_head_num, 
             decoder_ff_dim, 
@@ -340,7 +347,9 @@ class Audio2ImageModel(nn.Module):
             decoder_attn_dropout, 
             num_dec_layers)
         
-    
+    ###############################
+    #       Helper Functions      #
+    ###############################
     def get_audio_embedding(self, aud):
         """
         Generate embeddings map for audio input
@@ -359,7 +368,7 @@ class Audio2ImageModel(nn.Module):
         """
         Generate embeddings map for image output
         
-        img: Image input [batch_size, img_len, img_depth]
+        img: Image input [batch_size, img_len, img_range]
         
         Return: Image embeddings [batch_size, img_len, embedding_dim]
         """
@@ -368,23 +377,79 @@ class Audio2ImageModel(nn.Module):
             img_emb += self.img_pe[:, :img.size(1)].requires_grad(False)
         return img_emb
         
+        
+    def generate_padding_mask(self, x:torch.Tensor):
+        """
+        Create a Mask where the padding tokens in the input is masked as True
+        """
+        return (x == self.pad_token).unsqueeze(1)
     
+    
+    def generate_causal_mask(self, x:torch.Tensor):
+        '''
+        Create causal mask for decoder output sequence
+        
+        x: Input tensor [batch_size, tgt_len, embedding_dim]
+        '''
+        return torch.triu(torch.ones(x.size(1), x.size(1)), diagonal=1).unsqueeze(0).repeat(x.size(0), 1, 1).bool()
+        
+        
+    ###############################
+    #       Forward Function      #
+    ###############################
     def forward(self, input_tokens:torch.Tensor, output_tokens:torch.Tensor):
         '''
         input_tokens: Audio tokens [batch_size, aud_len, audio_depth]
-        output_tokens: Image tokens [batch_size, img_len, img_depth]
+        output_tokens: Image tokens [batch_size, img_len, img_range]
         
-        return: Image tokens [batch_size, img_len, img_depth]
+        return: Image tokens [batch_size, img_len, img_range]
         '''
+        # Create padding mask for src
+        src_mask = self.generate_padding_mask(input_tokens)
+        # Create causal mask for tgt
+        tgt_mask = self.generate_causal_mask(output_tokens)
+        
         # embed the image to vectors
         encoder_x = self.get_audio_embedding(input_tokens)
         # apply positional encoding
         decoder_x = self.get_img_embedding(output_tokens)
         
-        # Create padding mask for src
-        src_mask = (input_tokens == 0).unsqueeze(1)
         
         encoded_src = self.encoder(encoder_x, src_mask)
-        decoded_val = self.decoder(decoder_x, encoded_src, src_mask)
+        decoded_val = self.decoder(decoder_x, tgt_mask, encoded_src, src_mask)
         
         return decoded_val
+    
+    
+    ###############################
+    #     Generation Functions    #
+    ###############################
+    def generate_image(self, input_tokens:torch.Tensor, max_len:int=16384, min_len:int=16384):
+        """
+        Generate image from audio input. Use Greedy Decode ATM.
+        
+        input_tokens: Audio tokens [batch_size, aud_len, audio_depth]
+        out_len: Maximum length of the output image (dimensions of image)
+        
+        Return: Image tokens [batch_size, img_len, img_range]        
+        """
+        
+        generation_seq = torch.zeros(input_tokens.size(0), 1, self.img_range).fill_(self.sos_token).to(input_tokens.device)
+        src_mask = self.generate_padding_mask(input_tokens)
+        src_x = self.get_audio_embedding(input_tokens)
+        encoded_src = self.encoder(src_x, src_mask)
+        
+        for i in range(max_len):
+            tgt_mask = self.generate_causal_mask(generation_seq) & self.generate_padding_mask(generation_seq)
+            tgt_x = self.get_img_embedding(generation_seq)
+            decoded_seq = self.decoder(tgt_x, tgt_mask, encoded_src, src_mask)
+            
+            generated_token = decoded_seq[:, -1].argmax(dim=-1).unsqueeze(1)
+            generation_seq = torch.cat([generation_seq, generated_token], dim=1)
+            if (generated_token == self.eos_token).all() and generation_seq.size(1) >= min_len:
+                break
+            
+        return generation_seq[:, 1:]
+            
+            
+
