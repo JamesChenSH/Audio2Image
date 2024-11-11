@@ -41,8 +41,8 @@ def convert_to_tensor(path, target_path, file_name):
     return
 
 def dimension_reduce():
-    root_dir = 'C:/Users/EricZ/Downloads/CSC2541/3828124/ADVANCE_vision/vision/'
-    target_dir = 'C:/Users/EricZ/Downloads/CSC2541/3828124/ADVANCE_vision/vision_cleaned/'
+    root_dir = os.path.join("..", "data", "image_original")
+    target_dir = os.path.join("..", "data", "vision_cleaned")
 
     count = 0
     for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -62,8 +62,8 @@ def dimension_reduce():
 
 
 def convert_greyscale():
-    root_dir = "C:/Users/EricZ/OneDrive/Documents/GitHub/Audio2Image/data/vision_cleaned"
-    target_dir = "C:/Users/EricZ/OneDrive/Documents/GitHub/Audio2Image/data/vision_gs"
+    root_dir = os.path.join("..", "data", "vision_cleaned")
+    target_dir = os.path.join("..", "data", "vision_gs")
 
     count = 0
     for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -82,8 +82,8 @@ def convert_greyscale():
     print(count)
 
 def gs_to_tensor():
-    root_dir = "C:/Users/EricZ/OneDrive/Documents/GitHub/Audio2Image/data/vision_gs"
-    target_dir = "C:/Users/EricZ/OneDrive/Documents/GitHub/Audio2Image/data/vision_gs_tensor"
+    root_dir = os.path.join("..", "data", "vision_gs")
+    target_dir = os.path.join("..", "data", "vision_gs_tensor")
 
     count = 0
     for dirpath, dirnames, filenames in os.walk(root_dir):
