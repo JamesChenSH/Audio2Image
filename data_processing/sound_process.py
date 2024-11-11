@@ -63,6 +63,6 @@ def process_audio_files(root_dir, target_dir):
 
 # Run the function with relative paths
 if __name__ == "__main__":
-    root_dir = os.path.join("..", "data", "audio_original")
-    target_dir = os.path.join("..", "data", "audio_processed")
+    root_dir = os.path.join("data", "sound")
+    target_dir = os.path.join("data", "audio_processed")
     process_audio_files(root_dir, target_dir)
