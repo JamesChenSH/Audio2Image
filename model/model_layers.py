@@ -8,7 +8,7 @@ import torch.nn as nn
 # Sinusoidal Positional Encoding
 def positional_encoding_sinusoidal(
     model_dim:int, 
-    seq_len:int=24*24, 
+    seq_len:int=128*128, 
     temp:int=10000
     ):
     '''
@@ -217,6 +217,7 @@ class TransformerEncoder(nn.Module):
             else:
                 self.layers.append(EncoderTransformerBlock(embedding_dim, head_num, ff_dim, dropout_rate, attn_dropout))
         
+        
     def forward(self, src_x:torch.Tensor, src_mask:torch.Tensor=None):
         """
         x: Input sequence                        [batch_size, src_len, embedding_dim]
@@ -229,6 +230,7 @@ class TransformerEncoder(nn.Module):
         for layer in self.encoderLayers:
             src_x = layer(src_x, src_mask)
         return src_x
+
 
     def get_attention_scores(self):
         """ 

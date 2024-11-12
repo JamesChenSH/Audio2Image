@@ -11,7 +11,8 @@ class Audio2Image():
     
     def __init__(self, 
         dataset:torch.utils.data.Dataset,
-        audio_depth:int = 5,
+        audio_depth:int = 10000, # [src_len, audio_depth]
+        # input: [audio_timeline, audio_fourier] -> [img_pixel, 0-255]
         img_depth:int = 256, 
         device:str = 'cpu',
         embedding_dim:int = 1024, 
@@ -40,6 +41,7 @@ class Audio2Image():
             Depth of the image data, range [0, 255]
         dataset: torch.utils.data.Dataset
             Vision and audio dataset in torch format, one to one
+            [[audio[0], img[0]], [audio[1], img[1]], ...]
         device: str
             Device to run the model on, either 'cuda' or 'cpu' or 'mps'
         embedding_dim: int
