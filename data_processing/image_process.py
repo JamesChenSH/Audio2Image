@@ -163,4 +163,5 @@ def big_rgb_tensor():
 
     print("Total tensors loaded:", count)
 
+big_gs_tensor()
 big_rgb_tensor()
