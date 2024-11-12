@@ -21,9 +21,9 @@ def perform_fft(data, sample_rate):
     return fft_data, fft_freq
 
 
-def save_as_tensor(fft_data, fft_freq, target_path, filename):
+def save_as_tensor(fft_data_segments, fft_freq, target_path, filename):
     # Convert FFT data and frequencies to PyTorch tensors
-    fft_data_tensor = torch.Tensor(fft_data)
+    fft_data_tensor = torch.Tensor(fft_data_segments)
 
     # Define the save path and filename
     tensor_filename = os.path.splitext(filename)[0] + ".pt"
@@ -51,18 +51,57 @@ def process_audio_files(root_dir, target_dir):
                 file_path = os.path.join(dirpath, filename)
                 sample_rate, data = wav.read(file_path)
 
-                # Perform FFT on the audio data
-                fft_data, fft_freq = perform_fft(data, sample_rate)
+                # split data into 10 pieces
+                PIECE_NUM = 50
+                segment_length = len(data) // PIECE_NUM
+                fft_data_segments = []
+
+                for i in range(PIECE_NUM):
+                    start = i * segment_length
+                    end = start + segment_length
+                    data_segment = data[start:end]
+
+                    # Perform FFT on the audio data
+                    fft_data, fft_freq = perform_fft(data_segment, sample_rate)
+                    fft_data_segments.append(fft_data)
 
                 # Save FFT data and frequencies as a tensor file
-                save_as_tensor(fft_data, fft_freq, curr_target_dir, filename)
+                save_as_tensor(np.array(fft_data_segments), fft_freq, curr_target_dir, filename)
                 
                 count += 1
     print(f"Processed {count} audio files.")
 
 
+def build_joint_sound_tensor(processed_dir, joint_dir):
+    count = 0
+    tensor_list = []
+
+    for dirpath, _, filenames in os.walk(processed_dir):
+        for filename in filenames:
+            if dirpath == processed_dir:
+                continue
+
+            file_path = os.path.join(dirpath, filename)
+            curr_tensor = torch.load(file_path)
+
+            tensor_list.append(curr_tensor.unsqueeze(dim=0))
+            count += 1
+
+    try:
+        tensor = torch.cat(tensor_list, dim=0)
+        print(tensor.shape)
+    except RuntimeError as e:
+        print(f"Error stacking tensors: {e}")
+
+    torch.save(tensor, joint_dir)
+
+    print("Total tensors loaded:", count)
+
+
 # Run the function with relative paths
 if __name__ == "__main__":
-    root_dir = os.path.join("data", "sound")
-    target_dir = os.path.join("data", "audio_processed")
-    process_audio_files(root_dir, target_dir)
+    root_dir = os.path.join("..", "data", "sound")
+    processed_dir = os.path.join("..", "data", "audio_processed")
+    process_audio_files(root_dir, processed_dir)
+    joint_dir = os.path.join("..", "data", "audio_tensor.pt")
+    build_joint_sound_tensor(processed_dir, joint_dir)
