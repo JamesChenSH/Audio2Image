@@ -41,8 +41,8 @@ def convert_to_tensor(path, target_path, file_name):
     return
 
 def dimension_reduce():
-    root_dir = 'C:/Users/EricZ/Downloads/CSC2541/3828124/ADVANCE_vision/vision/'
-    target_dir = 'C:/Users/EricZ/Downloads/CSC2541/3828124/ADVANCE_vision/vision_cleaned/'
+    root_dir = os.path.join("..", "data", "image_original")
+    target_dir = os.path.join("..", "data", "vision_cleaned")
 
     count = 0
     for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -62,8 +62,8 @@ def dimension_reduce():
 
 
 def convert_greyscale():
-    root_dir = "C:/Users/EricZ/OneDrive/Documents/GitHub/Audio2Image/data/vision_cleaned"
-    target_dir = "C:/Users/EricZ/OneDrive/Documents/GitHub/Audio2Image/data/vision_gs"
+    root_dir = os.path.join("..", "data", "vision_cleaned")
+    target_dir = os.path.join("..", "data", "vision_gs")
 
     count = 0
     for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -82,8 +82,8 @@ def convert_greyscale():
     print(count)
 
 def gs_to_tensor():
-    root_dir = "C:/Users/EricZ/OneDrive/Documents/GitHub/Audio2Image/data/vision_gs"
-    target_dir = "C:/Users/EricZ/OneDrive/Documents/GitHub/Audio2Image/data/vision_gs_tensor"
+    root_dir = os.path.join("..", "data", "vision_gs")
+    target_dir = os.path.join("..", "data", "vision_gs_tensor")
 
     count = 0
     for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -102,4 +102,66 @@ def gs_to_tensor():
 
     print(count)
 
-gs_to_tensor()
+
+def big_gs_tensor():
+    root_dir = os.path.join("data", "vision_gs_tensor")
+    count = 0
+    tensor_list = []
+    
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        for filename in filenames:
+            if filename == ".DS_Store":
+                continue
+            file_path = os.path.join(dirpath, filename)
+            curr_tensor = torch.load(file_path)
+            
+            tensor_list.append(curr_tensor.unsqueeze(dim=0))
+            count += 1
+            
+    try:
+        tensor = torch.cat(tensor_list, dim=0)
+        print(tensor.shape)
+    except RuntimeError as e:
+        print(f"Error stacking tensors: {e}")
+    
+    torch.save(tensor, os.path.join("data", "gs_image_tensor.pt"))
+
+    print("Total tensors loaded:", count)
+
+def big_rgb_tensor():
+    root_dir = os.path.join("data", "vision_cleaned")
+    count = 0
+    tensor_list = []
+    
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        for filename in filenames:
+            if filename == ".DS_Store":
+                continue
+            file_path = os.path.join(dirpath, filename)
+            
+            image = Image.open(file_path).convert("RGB")
+    
+            # Transform the image to a tensor with shape [3, H, W]
+            transform = transforms.ToTensor()
+            img_tensor = transform(image)  # Shape: [3, H, W]
+            
+            # Permute to [H, W, 3] and reshape to [H, 3*W]
+            img_tensor = img_tensor.permute(1, 2, 0)  # Shape: [H, W, 3]
+            h, w, c = img_tensor.shape
+            unfolded_tensor = img_tensor.reshape(h, c * w)  # Shape: [H, 3W]
+            
+            tensor_list.append(unfolded_tensor.unsqueeze(dim=0))
+            count += 1
+            
+    try:
+        tensor = torch.cat(tensor_list, dim=0)
+        print(tensor.shape)
+    except RuntimeError as e:
+        print(f"Error stacking tensors: {e}")
+    
+    torch.save(tensor, os.path.join("data", "rgb_image_tensor.pt"))
+
+    print("Total tensors loaded:", count)
+
+big_gs_tensor()
+big_rgb_tensor()
