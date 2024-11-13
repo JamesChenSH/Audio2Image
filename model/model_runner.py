@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.utils.data
 import tqdm
+from skimage.metrics import structural_similarity as ssim
 
 from typing import List
 
@@ -115,6 +116,7 @@ class Audio2Image():
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', factor=0.5, patience=10)
         self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)       
+        self.validation_criterion = torch.nn.SSIM()
         self.epochs = 12
         self.patience = 5
         
@@ -171,12 +173,13 @@ class Audio2Image():
                 for i, (audio, img) in enumerate(val_dataloader):
                     # TODO: 
                     # Need to compare the predicted image with the actual image with some function
-                    pass
-                    
-                    
+                    gen_img = self.model.generate_image(audio)
+                    loss = ssim(gen_img, img)
+                    val_loss += loss
             
             print(f"== Validation Loss: {val_loss}, Device: {self.device}")
             
+
     def test(
         self,
         testing_dataloader:torch.utils.data.DataLoader,
@@ -192,8 +195,9 @@ class Audio2Image():
         
         with torch.no_grad():
             for i, (audio, img) in enumerate(testing_dataloader):
-                # TODO
-                pass
+                gen_img = self.model.generate_image(audio)
+                loss = ssim(gen_img, img)
+                test_loss += loss
         
         print(f"Test Loss: {test_loss}, Device: {self.device}")     
         
