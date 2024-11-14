@@ -245,7 +245,7 @@ class TransformerEncoder(nn.Module):
 class TransformerDecoder(nn.Module):
     def __init__(
         self, 
-        img_range:int,
+        img_depth:int,
         embedding_dim:int, 
         head_num:int, 
         ff_dim:int, 
@@ -264,7 +264,7 @@ class TransformerDecoder(nn.Module):
             else:
                 self.layers.append(DecoderTransformerBlock(embedding_dim, head_num, ff_dim, dropout_rate, attn_dropout))
                 
-        self.linearLayer = DecoderLinearLayer(embedding_dim, img_range, use_log_softmax)
+        self.linearLayer = DecoderLinearLayer(embedding_dim, img_depth)
     
     
     def forward(self, decoder_x:torch.Tensor, decoder_mask:torch.Tensor, encoder_x:torch.Tensor, encoder_mask:torch.Tensor):
@@ -287,15 +287,11 @@ class DecoderLinearLayer(nn.Module):
         self, 
         embedding_dim:int, 
         out_dimension:float,
-        use_log_softmax:bool=False
         ) -> None:
         super(DecoderLinearLayer, self).__init__()
         self.linear = nn.Linear(embedding_dim, out_dimension)
-        self.use_log_softmax = use_log_softmax
         
     def forward(self, x:torch.Tensor):
-        if self.use_log_softmax:
-            return nn.functional.log_softmax(self.linear(x), dim=-1)
         return self.linear(x)
 
 
@@ -450,8 +446,11 @@ class Audio2ImageModel(nn.Module):
             generation_seq = torch.cat([generation_seq, generated_token], dim=1)
             if (generated_token == self.eos_token).all() and generation_seq.size(1) >= min_len:
                 break
-            
-        return generation_seq[:, 1:]
+        
+        # TODO: Use softmax to get pixel value of entire image
+        img_out = generation_seq[:, 1:].log_softmax(dim=-1)
+
+        return img_out
             
             
 

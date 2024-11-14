@@ -126,7 +126,6 @@ class Audio2Image():
         self,
         training_dataloader:torch.utils.data.DataLoader,
         val_dataloader:torch.utils.data.DataLoader,
-        output_padding: int = 200,
         batch_size: int = 64,
     ) -> None:
         '''
@@ -171,8 +170,7 @@ class Audio2Image():
             
             with torch.no_grad():
                 for i, (audio, img) in enumerate(val_dataloader):
-                    # TODO: 
-                    # Need to compare the predicted image with the actual image with some function
+                    # Compare the predicted image with the actual image with some function
                     gen_img = self.model.generate_image(audio)
                     loss = ssim(gen_img, img)
                     val_loss += loss
@@ -182,9 +180,7 @@ class Audio2Image():
 
     def test(
         self,
-        testing_dataloader:torch.utils.data.DataLoader,
-        output_padding: int = 200,
-        batch_size: int = 64,
+        testing_dataloader:torch.utils.data.DataLoader
     ):
         self.model.to(self.device)
         self.criterion.to(self.device)
@@ -201,6 +197,8 @@ class Audio2Image():
         
         print(f"Test Loss: {test_loss}, Device: {self.device}")     
         
+
+
 if __name__ == "__main__":
 
     model = Audio2Image(dataset=None)
