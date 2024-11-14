@@ -40,9 +40,11 @@ def convert_to_tensor(path, target_path, file_name):
 
     return
 
+
+
 def dimension_reduce():
-    root_dir = os.path.join("..", "data", "image_original")
-    target_dir = os.path.join("..", "data", "vision_cleaned")
+    root_dir = os.path.join("data", "image_original")
+    target_dir = os.path.join("data", "vision_cleaned")
 
     count = 0
     for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -62,8 +64,8 @@ def dimension_reduce():
 
 
 def convert_greyscale():
-    root_dir = os.path.join("..", "data", "vision_cleaned")
-    target_dir = os.path.join("..", "data", "vision_gs")
+    root_dir = os.path.join("data", "vision_cleaned")
+    target_dir = os.path.join("data", "vision_gs")
 
     count = 0
     for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -82,8 +84,9 @@ def convert_greyscale():
     print(count)
 
 def gs_to_tensor():
-    root_dir = os.path.join("..", "data", "vision_gs")
-    target_dir = os.path.join("..", "data", "vision_gs_tensor")
+    convert_greyscale()
+    root_dir = os.path.join("data", "vision_gs")
+    target_dir = os.path.join("data", "vision_gs_tensor")
 
     count = 0
     for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -104,7 +107,8 @@ def gs_to_tensor():
 
 
 def big_gs_tensor():
-    root_dir = os.path.join("..", "data", "vision_gs_tensor")
+    gs_to_tensor()
+    root_dir = os.path.join("data", "vision_gs_tensor")
     count = 0
     tensor_list = []
     
@@ -114,7 +118,7 @@ def big_gs_tensor():
                 continue
             file_path = os.path.join(dirpath, filename)
             curr_tensor = torch.load(file_path)
-            
+            curr_tensor = curr_tensor.flatten()
             tensor_list.append(curr_tensor.unsqueeze(dim=0))
             count += 1
             
@@ -124,12 +128,12 @@ def big_gs_tensor():
     except RuntimeError as e:
         print(f"Error stacking tensors: {e}")
     
-    torch.save(tensor, os.path.join("..", "data", "gs_image_tensor.pt"))
+    torch.save(tensor, os.path.join("data", "gs_image_tensor.pt"))
 
     print("Total tensors loaded:", count)
 
 def big_rgb_tensor():
-    root_dir = os.path.join("..", "data", "vision_cleaned")
+    root_dir = os.path.join("data", "vision_cleaned")
     count = 0
     tensor_list = []
     
@@ -149,6 +153,8 @@ def big_rgb_tensor():
             img_tensor = img_tensor.permute(1, 2, 0)  # Shape: [H, W, 3]
             h, w, c = img_tensor.shape
             unfolded_tensor = img_tensor.reshape(h, c * w)  # Shape: [H, 3W]
+
+            unfolded_tensor = unfolded_tensor.flatten()
             
             tensor_list.append(unfolded_tensor.unsqueeze(dim=0))
             count += 1
@@ -159,12 +165,13 @@ def big_rgb_tensor():
     except RuntimeError as e:
         print(f"Error stacking tensors: {e}")
     
-    torch.save(tensor, os.path.join("..", "data", "rgb_image_tensor.pt"))
+    torch.save(tensor, os.path.join("data", "rgb_image_tensor.pt"))
 
     print("Total tensors loaded:", count)
 
 
 # Run the function with relative paths
 if __name__ == "__main__":
+    dimension_reduce()
     big_gs_tensor()
     big_rgb_tensor()
