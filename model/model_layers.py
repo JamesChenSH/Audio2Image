@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 import torch
 import torch.nn as nn
 
@@ -8,7 +9,7 @@ import torch.nn as nn
 # Sinusoidal Positional Encoding
 def positional_encoding_sinusoidal(
     model_dim:int, 
-    seq_len:int=128*128, 
+    seq_len:int=100, 
     temp:int=10000
     ):
     '''
@@ -36,7 +37,7 @@ def positional_encoding_sinusoidal(
 # We Embned the image inputs into 12 dimensions to fit into the model. 
 # Then we apply a positional encoding to the image embeddings for the 
 # entire sequence using cos sin.
-class TransformerEmbedding(nn.Module):
+class TransformerLinearEmbedding(nn.Module):
     def __init__(
         self, 
         input_depth:int=5, 
@@ -46,6 +47,23 @@ class TransformerEmbedding(nn.Module):
         self.input_depth = input_depth
         self.model_dim = embedding_dim
         self.embeddingLayer = nn.Linear(input_depth, embedding_dim)
+        
+    def forward(
+        self, 
+        x: torch.Tensor):
+        return self.embeddingLayer(x)
+
+
+class TransformerValueEmbedding(nn.Module):
+    def __init__(
+        self, 
+        value_range:int=256, 
+        embedding_dim:int=12
+        ):
+        super().__init__()
+        self.value_range = value_range
+        self.model_dim = embedding_dim
+        self.embeddingLayer = nn.Embedding(value_range, embedding_dim)
         
     def forward(
         self, 
@@ -92,7 +110,7 @@ class EncoderTransformerBlock(nn.Module):
         ) -> None:
         super(EncoderTransformerBlock, self).__init__()
         
-        self.selfAttention = nn.MultiheadAttention(embed_dim=embedding_dim, num_heads=head_num, dropout=dropout_rate)
+        self.selfAttention = nn.MultiheadAttention(batch_first=True, embed_dim=embedding_dim, num_heads=head_num, dropout=attn_dropout)
         self.attnDropout = nn.Dropout(attn_dropout)
         self.layerNorm1 = nn.LayerNorm(embedding_dim)
         self.layerNorm2 = nn.LayerNorm(embedding_dim)
@@ -114,7 +132,7 @@ class EncoderTransformerBlock(nn.Module):
         
         # Self Multihead Attention
         # Q,K,V = x for self attention.
-        attention_output, attention_score = self.selfAttention(x, x, x, need_weights=self.need_weights, attn_mask=src_mask)
+        attention_output, attention_score = self.selfAttention(x, x, x, need_weights=self.need_weights, key_padding_mask=src_mask)
         # Layer Normalization
         attn_layer_norm_output = self.layerNorm1(self.attnDropout(attention_output) + x)
         # Feed Forward
@@ -145,9 +163,9 @@ class DecoderTransformerBlock(nn.Module):
         ) -> None:
         super(DecoderTransformerBlock, self).__init__()
         
-        self.selfAttention = nn.MultiheadAttention(embed_dim=embedding_dim, num_heads=head_num, dropout=dropout_rate)
+        self.selfAttention = nn.MultiheadAttention(batch_first=True, embed_dim=embedding_dim, num_heads=head_num, dropout=dropout_rate)
         self.selfAttentionDropout = nn.Dropout(attn_dropout)
-        self.crossAttention = nn.MultiheadAttention(embed_dim=embedding_dim, num_heads=head_num, dropout=dropout_rate)
+        self.crossAttention = nn.MultiheadAttention(batch_first=True, embed_dim=embedding_dim, num_heads=head_num, dropout=dropout_rate)
         self.crossAttentionDropout = nn.Dropout(attn_dropout)
         
         self.layerNorm1 = nn.LayerNorm(embedding_dim)
@@ -176,7 +194,7 @@ class DecoderTransformerBlock(nn.Module):
         # Layer Normalization
         self_attention_layer_norm_output = self.layerNorm1(self.selfAttentionDropout(self_attention_output) + decoder_x)
         # Cross Attention - Use padding mask
-        cross_attention_output, cross_attention_score = self.crossAttention(decoder_x, encoder_x, encoder_x, need_weights=self.need_weights, attn_mask=encoder_mask)
+        cross_attention_output, cross_attention_score = self.crossAttention(decoder_x, encoder_x, encoder_x, need_weights=self.need_weights, key_padding_mask=encoder_mask)
         # Layer Normalization
         cross_attention_layer_norm_output = self.layerNorm2(self.crossAttentionDropout(cross_attention_output) + self_attention_layer_norm_output)
         # Feed Forward
@@ -185,7 +203,7 @@ class DecoderTransformerBlock(nn.Module):
         ff_norm = self.layerNorm3(ff_output + cross_attention_layer_norm_output)
         
         # Return the output
-        if self.need_weights :
+        if self.need_weights:
             self.self_attention_score = self_attention_score
             self.cross_attention_score = cross_attention_score
         return ff_norm
@@ -227,7 +245,7 @@ class TransformerEncoder(nn.Module):
         """
         
         src_x = self.layerNorm(src_x)
-        for layer in self.encoderLayers:
+        for layer in self.layers:
             src_x = layer(src_x, src_mask)
         return src_x
 
@@ -251,8 +269,7 @@ class TransformerDecoder(nn.Module):
         ff_dim:int, 
         dropout_rate:float, 
         attn_dropout:float, 
-        num_dec_layers:int,
-        use_log_softmax:bool=False
+        num_dec_layers:int
         ) -> None:
         super(TransformerDecoder, self).__init__()
         # Decoder Layers
@@ -312,21 +329,27 @@ class Audio2ImageModel(nn.Module):
         decoder_attn_dropout:float, 
         num_enc_layers:int, 
         num_dec_layers:int, 
-        sos_token:int=256,
-        eos_token:int=257,
-        pad_token:int=258
+        img_special_token:tuple,
+        aud_special_tokens:tuple,
+        device:str
         ) -> None:
         super(Audio2ImageModel, self).__init__()
         
-        self.sos_token = sos_token
-        self.eos_token = eos_token
-        self.pad_token = pad_token
+        self.img_depth = img_depth
+        self.audio_depth = audio_depth
+        self.device = device
         
-        self.aud_pe = positional_encoding_sinusoidal(embedding_dim)  
-        self.img_pe = positional_encoding_sinusoidal(embedding_dim)    
+        self.encoder_head_num = encoder_head_num
+        self.decoder_head_num = decoder_head_num
         
-        self.audio_embedding = TransformerEmbedding(audio_depth, embedding_dim)             # [batch_size, aud_len, embedding_dim]
-        self.img_embedding = TransformerEmbedding(img_depth, embedding_dim)                 # [batch_size, img_len, embedding_dim]
+        self.img_sos, self.img_eos, self.img_pad = img_special_token
+        self.audio_sos, self.aud_eos, self.audio_pad = aud_special_tokens
+        
+        self.aud_pe = positional_encoding_sinusoidal(embedding_dim, 50).to(self.device)
+        self.img_pe = positional_encoding_sinusoidal(embedding_dim, 128*128).to(self.device)
+        
+        self.audio_embedding = TransformerLinearEmbedding(audio_depth, embedding_dim)             # [batch_size, aud_len, embedding_dim]
+        self.img_embedding = TransformerValueEmbedding(img_depth, embedding_dim)                 # [batch_size, img_len, embedding_dim]
         
         self.encoder = TransformerEncoder(
             embedding_dim, 
@@ -358,7 +381,7 @@ class Audio2ImageModel(nn.Module):
         """
         aud_emb = self.audio_embedding(aud)
         if self.aud_pe is not None:
-            aud_emb += self.aud_pe[:, :aud.size(1)].requires_grad(False)
+            aud_emb += self.aud_pe[:, :aud.size(1)]
         return aud_emb
     
     
@@ -366,21 +389,31 @@ class Audio2ImageModel(nn.Module):
         """
         Generate embeddings map for image output
         
-        img: Image input [batch_size, img_len, img_range]
+        img: Image input [batch_size, img_len], 0-258
         
         Return: Image embeddings [batch_size, img_len, embedding_dim]
         """
         img_emb = self.img_embedding(img)
         if self.img_pe is not None:
-            img_emb += self.img_pe[:, :img.size(1)].requires_grad(False)
+            img_emb += self.img_pe[:, :img.size(1)]
         return img_emb
         
         
-    def generate_padding_mask(self, x:torch.Tensor):
+    def generate_padding_mask(self, x:torch.Tensor, use_audio=False):
         """
         Create a Mask where the padding tokens in the input is masked as True
+        
+        Input: x, [batch_size, seq_len, depth]  if x is audio
+                  [batch_size, seq_len]         if x is image
+        
+        Return: Padding mask [batch_size, seq_len]
+        
         """
-        return (x == self.pad_token).unsqueeze(1)
+        padding_token = self.img_pad
+        if use_audio:
+            padding_token = self.audio_pad
+            return torch.all(torch.eq(x, padding_token), dim=-1)
+        return torch.eq(x, padding_token)
     
     
     def generate_causal_mask(self, x:torch.Tensor):
@@ -388,8 +421,12 @@ class Audio2ImageModel(nn.Module):
         Create causal mask for decoder output sequence
         
         x: Input tensor [batch_size, tgt_len, embedding_dim]
+        
+        Return: Causal mask [tgt_len, tgt_len]
+    
+        
         '''
-        return torch.triu(torch.ones(x.size(1), x.size(1)), diagonal=1).unsqueeze(0).repeat(x.size(0), 1, 1).bool()
+        return torch.triu(torch.ones(x.size(1), x.size(1)), diagonal=1).bool().to(self.device)
         
         
     ###############################
@@ -412,7 +449,6 @@ class Audio2ImageModel(nn.Module):
         # apply positional encoding
         decoder_x = self.get_img_embedding(output_tokens)
         
-        
         encoded_src = self.encoder(encoder_x, src_mask)
         decoded_val = self.decoder(decoder_x, tgt_mask, encoded_src, src_mask)
         
@@ -429,22 +465,34 @@ class Audio2ImageModel(nn.Module):
         input_tokens: Audio tokens [batch_size, aud_len, audio_depth]
         out_len: Maximum length of the output image (dimensions of image)
         
-        Return: Image tokens [batch_size, img_len, img_range]        
+        Return: Image tokens [batch_size, img_len]        
         """
         
-        generation_seq = torch.zeros(input_tokens.size(0), 1, self.img_range).fill_(self.sos_token).to(input_tokens.device)
-        src_mask = self.generate_padding_mask(input_tokens)
-        src_x = self.get_audio_embedding(input_tokens)
+        generation_seq = torch.zeros(input_tokens.size(0), 1, dtype=int).fill_(self.img_sos).to(self.device)
+        src_mask = self.generate_padding_mask(input_tokens, use_audio=True).to(self.device)
+        src_x = self.get_audio_embedding(input_tokens).to(self.device)
         encoded_src = self.encoder(src_x, src_mask)
         
         for i in range(max_len):
-            tgt_mask = self.generate_causal_mask(generation_seq) & self.generate_padding_mask(generation_seq)
+            print(f"Generation Step: {i}")
+            # Generate Masks for Target Sequence
+            tgt_causal_mask = self.generate_causal_mask(generation_seq).unsqueeze(0).repeat(generation_seq.size(0), 1, 1)
+            tgt_padding_mask = self.generate_padding_mask(generation_seq).unsqueeze(1).repeat(1, generation_seq.size(1), 1)
+            tgt_mask = tgt_causal_mask | tgt_padding_mask
+            
+            # print(tgt_mask.shape)
+            tgt_mask = tgt_mask.unsqueeze(1).repeat(1, self.decoder_head_num, 1, 1)
+            # print(tgt_mask.shape)
+            tgt_mask = tgt_mask.view(-1, tgt_mask.size(2), tgt_mask.size(3))
+            # print(tgt_mask.shape)
             tgt_x = self.get_img_embedding(generation_seq)
+            
+            
             decoded_seq = self.decoder(tgt_x, tgt_mask, encoded_src, src_mask)
             
             generated_token = decoded_seq[:, -1].argmax(dim=-1).unsqueeze(1)
             generation_seq = torch.cat([generation_seq, generated_token], dim=1)
-            if (generated_token == self.eos_token).all() and generation_seq.size(1) >= min_len:
+            if (generated_token == self.img_eos).all() and generation_seq.size(1) >= min_len:
                 break
         
         # TODO: Use softmax to get pixel value of entire image

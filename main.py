@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 import torch.utils.data
 import tqdm
@@ -6,15 +5,19 @@ from skimage.metrics import structural_similarity as ssim
 
 from typing import List
 
-from model_layers import Audio2ImageModel
+from model.model_layers import Audio2ImageModel
+from data_processing.build_database import AudioImageDataset
 
 class Audio2Image():
+    '''
+    The Wrapper class for Audio2Image model. We can define the structure of model here
     
-    def __init__(self, 
-        dataset:torch.utils.data.Dataset,
-        audio_depth:int = 10000, # [src_len, audio_depth]
-        # input: [audio_timeline, audio_fourier] -> [img_pixel, 0-255]
-        img_depth:int = 256, 
+    model input: [audio_timeline, audio_fourier] 
+    model output: [img_pixel, 0-255]
+    '''
+    def __init__(self,
+        audio_depth:int = 2205, # [src_len, audio_depth]
+        img_depth:int = 259, 
         device:str = 'cpu',
         embedding_dim:int = 1024, 
         encoder_head_num:int = 2, 
@@ -40,9 +43,6 @@ class Audio2Image():
             Depth of the audio data, range [TBD]
         img_depth: int
             Depth of the image data, range [0, 255]
-        dataset: torch.utils.data.Dataset
-            Vision and audio dataset in torch format, one to one
-            [[audio[0], img[0]], [audio[1], img[1]], ...]
         device: str
             Device to run the model on, either 'cuda' or 'cpu' or 'mps'
         embedding_dim: int
@@ -70,7 +70,6 @@ class Audio2Image():
         """
         self.audio_depth = audio_depth
         self.img_depth = img_depth
-        self.dataset = dataset
         self.embedding_dim = embedding_dim
         self.encoder_head_num = encoder_head_num
         self.decoder_head_num = decoder_head_num
@@ -83,14 +82,23 @@ class Audio2Image():
         self.num_enc_layers = num_enc_layers
         self.num_dec_layers = num_dec_layers
         
-        self.device = device
         if device == 'cuda' and torch.cuda.is_available():
-            self.device_type = "cuda"
-        elif device == "mps":
-            self.device_type = "cpu"
+            self.device = "cuda"
+        elif device == 'mps':
+            self.device = "mps"
         else:
-            self.device_type = self.device
+            self.device = 'cpu'
         
+        
+        # Hard Coded Params
+        self.img_spec_tokens = (256, 257, 258)
+        self.aud_spec_tokens = (
+            torch.tile(torch.tensor([0.0]), (1, audio_depth)).to(self.device),  
+            torch.tile(torch.tensor([-1.0]), (1, audio_depth)).to(self.device),
+            torch.tile(torch.tensor([-2.0]), (1, audio_depth)).to(self.device),
+        )
+        
+    
         self.model = Audio2ImageModel(
             self.audio_depth, 
             self.img_depth,
@@ -104,8 +112,14 @@ class Audio2Image():
             self.encoder_attn_dropout, 
             self.decoder_attn_dropout, 
             self.num_enc_layers, 
-            self.num_dec_layers
-        )
+            self.num_dec_layers,
+            self.img_spec_tokens,
+            self.aud_spec_tokens,
+            self.device
+        ).to(self.device)
+        
+        self.model.to(self.device)
+        print(f"Model created on device: {self.device}")
         
         self.encoder = self.model.encoder
         self.decoder = self.model.decoder
@@ -116,7 +130,7 @@ class Audio2Image():
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', factor=0.5, patience=10)
         self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)       
-        self.validation_criterion = torch.nn.SSIM()
+        self.validation_criterion = ssim
         self.epochs = 12
         self.patience = 5
         
@@ -146,7 +160,7 @@ class Audio2Image():
             total_loss = 0
             print(f"== Epoch: {epoch}, Device: {self.device} ==")
 
-            for batch, (audio, img) in enumerate(training_dataloader):
+            for _, (audio, img) in enumerate(tqdm(training_dataloader)):
                 audio = audio.to(self.device)
                 img = img.to(self.device)
                 
@@ -172,7 +186,7 @@ class Audio2Image():
                 for i, (audio, img) in enumerate(val_dataloader):
                     # Compare the predicted image with the actual image with some function
                     gen_img = self.model.generate_image(audio)
-                    loss = ssim(gen_img, img)
+                    loss = self.validation_criterion(gen_img, img)
                     val_loss += loss
             
             print(f"== Validation Loss: {val_loss}, Device: {self.device}")
@@ -192,15 +206,42 @@ class Audio2Image():
         with torch.no_grad():
             for i, (audio, img) in enumerate(testing_dataloader):
                 gen_img = self.model.generate_image(audio)
-                loss = ssim(gen_img, img)
+                loss = self.validation_criterion(gen_img, img)
                 test_loss += loss
         
-        print(f"Test Loss: {test_loss}, Device: {self.device}")     
-        
+        print(f"Test Loss: {test_loss}, Device: {self.device}")             
 
 
 if __name__ == "__main__":
 
-    model = Audio2Image(dataset=None)
-    total_params = sum(p.numel() for p in model.model.parameters())
-    print(f"Number of parameters: {total_params}")
+    config = {
+        'batch size': 64,
+        'train ratio': 0.8,
+        'validation ratio': 0.1,
+        'test ratio': 0.1,
+    }
+
+    # Load the dataset
+    ds_path = "data/DS_audio_gs.pt"
+    ds = torch.load(ds_path)
+    
+    # Split Train, Val, Test
+    train_size = int(config['train ratio']*len(ds))
+    val_size = int(config['validation ratio']*len(ds))
+    test_size = len(ds) - train_size - val_size
+    
+    train, val, test = torch.utils.data.random_split(ds, [train_size, val_size, test_size])
+    
+    train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
+    val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)    
+    test_dataloader = torch.utils.data.DataLoader(test, batch_size=config['batch size'], shuffle=True)
+    
+    a2i_core = Audio2Image()
+    
+    # Chack size of model
+    # total_params = sum(p.numel() for p in a2i_core.model.parameters())
+    # print(f"Number of parameters: {total_params}")
+    
+    # Test code
+    audio_data = ds.audio_data.to(a2i_core.device)
+    print(a2i_core.model.generate_image(audio_data[0].unsqueeze(0)))
