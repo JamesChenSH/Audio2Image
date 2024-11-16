@@ -18,7 +18,7 @@ class Audio2Image():
     def __init__(self,
         audio_depth:int = 2205, # [src_len, audio_depth]
         img_depth:int = 259, 
-        device:str = 'cpu',
+        device:str = 'mps',
         embedding_dim:int = 1024, 
         encoder_head_num:int = 2, 
         decoder_head_num:int = 2,
@@ -140,7 +140,7 @@ class Audio2Image():
         self,
         training_dataloader:torch.utils.data.DataLoader,
         val_dataloader:torch.utils.data.DataLoader,
-        batch_size: int = 64,
+        batch_size: int = 8,
     ) -> None:
         '''
         Parameters:
@@ -154,18 +154,21 @@ class Audio2Image():
         
         passed_epochs = 0
         
-        for epoch in self.epochs:
+        for epoch in range(self.epochs):
             self.model.train()
             
             total_loss = 0
             print(f"== Epoch: {epoch}, Device: {self.device} ==")
 
-            for _, (audio, img) in enumerate(tqdm(training_dataloader)):
+            for audio, img in training_dataloader:
                 audio = audio.to(self.device)
                 img = img.to(self.device)
                 
+                img = img.int()
+                
                 self.optimizer.zero_grad()
                 # Input a shifted out_image to model as well as input audio
+                print(audio.shape, img[:, :-1].shape)
                 output = self.model(audio, img[:, :-1])
                 # Outputs a predicted image
                 loss = self.criterion(output, img[:, 1:])
@@ -215,7 +218,7 @@ class Audio2Image():
 if __name__ == "__main__":
 
     config = {
-        'batch size': 64,
+        'batch size': 8,
         'train ratio': 0.8,
         'validation ratio': 0.1,
         'test ratio': 0.1,
@@ -243,5 +246,8 @@ if __name__ == "__main__":
     # print(f"Number of parameters: {total_params}")
     
     # Test code
-    audio_data = ds.audio_data.to(a2i_core.device)
-    print(a2i_core.model.generate_image(audio_data[0].unsqueeze(0)))
+    # audio_data = ds.audio_data.to(a2i_core.device)
+    # print(a2i_core.model.generate_image(audio_data[0].unsqueeze(0)))
+    
+    # Train
+    a2i_core.train(train_dataloader, val_dataloader, batch_size=config['batch size'])

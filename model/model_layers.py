@@ -440,7 +440,7 @@ class Audio2ImageModel(nn.Module):
         return: Image tokens [batch_size, img_len, img_range]
         '''
         # Create padding mask for src
-        src_mask = self.generate_padding_mask(input_tokens)
+        src_mask = self.generate_padding_mask(input_tokens, use_audio=True)
         # Create causal mask for tgt
         tgt_mask = self.generate_causal_mask(output_tokens)
         
