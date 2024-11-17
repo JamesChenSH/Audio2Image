@@ -1,6 +1,8 @@
 import torch
 import torch.utils.data
-import tqdm
+from torch.autograd import Variable
+
+from tqdm import tqdm
 from skimage.metrics import structural_similarity as ssim
 
 from typing import List
@@ -18,18 +20,18 @@ class Audio2Image():
     def __init__(self,
         audio_depth:int = 2205, # [src_len, audio_depth]
         img_depth:int = 259, 
-        device:str = 'mps',
-        embedding_dim:int = 1024, 
-        encoder_head_num:int = 2, 
+        device:str = 'cpu',                     # 'cuda' or 'cpu' or 'mps'
+        embedding_dim:int = 512,                # 1024 for optimal
+        encoder_head_num:int = 2,               
         decoder_head_num:int = 2,
-        encoder_ff_dim:int = 4*1024, 
-        decoder_ff_dim:int = 4*1024,
+        encoder_ff_dim:int = 4*512,             # 4*1024 for optimal
+        decoder_ff_dim:int = 4*512,             # 4*1024 for optimal
         encoder_dropout_rate:float = 0.1, 
         decoder_dropout_rate:float = 0.1,
         encoder_attn_dropout:float = 0.0,
         decoder_attn_dropout:float = 0.0, 
-        num_enc_layers:int = 6, 
-        num_dec_layers:int = 6, 
+        num_enc_layers:int = 2,                 # 12 for optimal
+        num_dec_layers:int = 2                  # 12 for optimal  
     ):
         """
         This is the main model for the Audio 2 Image project. We only need to build this once
@@ -160,7 +162,7 @@ class Audio2Image():
             total_loss = 0
             print(f"== Epoch: {epoch}, Device: {self.device} ==")
 
-            for audio, img in training_dataloader:
+            for audio, img in tqdm(training_dataloader):
                 audio = audio.to(self.device)
                 img = img.to(self.device)
                 
@@ -168,15 +170,15 @@ class Audio2Image():
                 
                 self.optimizer.zero_grad()
                 # Input a shifted out_image to model as well as input audio
-                print(audio.shape, img[:, :-1].shape)
                 output = self.model(audio, img[:, :-1])
+                
                 # Outputs a predicted image
-                loss = self.criterion(output, img[:, 1:])
+                loss = self.criterion(torch.argmax(output, dim=-1).float(), img[:, 1:].float())
                 self.optimizer.step()
                 self.scheduler.step(loss)
                 total_loss += loss.item()
-                
-                loss /= batch_size
+
+                loss = Variable(loss, requires_grad=True)
                 loss.backward()
             
             print(f"== Training Loss: {total_loss}, Device: {self.device}")
@@ -218,7 +220,7 @@ class Audio2Image():
 if __name__ == "__main__":
 
     config = {
-        'batch size': 8,
+        'batch size': 2,
         'train ratio': 0.8,
         'validation ratio': 0.1,
         'test ratio': 0.1,
