@@ -57,7 +57,7 @@ def dimension_reduce():
                 continue
             file_path = os.path.join(dirpath, filename)
 
-            resize_image(file_path, curr_target_dir, filename, 4)
+            resize_image(file_path, curr_target_dir, filename, 16)
             
             count += 1
     print(count)
