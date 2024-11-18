@@ -24,14 +24,7 @@ class AudioImageDataset(Dataset):
         audio_sample = self.audio_data[idx]
         img_sample = self.img_data[idx]
         return audio_sample, img_sample
-
-
-def build_dataset(joint_audio_path, joint_img_path, ds_save_path):
-    # Create an instance of the custom dataset
-    dataset = AudioImageDataset(joint_audio_path, joint_img_path)
-
-    # Save the dataset directly
-    torch.save(dataset, ds_save_path)
+    
 
 
 def build_dataloader(dataset_path, batch_size=32):
@@ -42,19 +35,47 @@ def build_dataloader(dataset_path, batch_size=32):
     return data_loader
 
 
+
+def build_dataset(base_path, audio_set_path='audio_tensor.pt', img_set_path='img_tensor.pt', output_path='Dataset_image_audio.pt'):
+    # Create an instance of the custom dataset
+    
+    joint_audio_path = os.path.join(base_path, audio_set_path)
+    joint_img_path = os.path.join(base_path, img_set_path)
+    output_path = os.path.join(base_path, output_path)
+    
+    dataset = AudioImageDataset(joint_audio_path, joint_img_path)
+
+    # Save the dataset directly
+    torch.save(dataset, output_path)
+    
+    print("Saved {} rows to {}".format(len(dataset), output_path))
+
+
 # Run the function with relative paths
 if __name__ == "__main__":
-    joint_audio_dir = os.path.join("..", "data", "audio_tensor.pt")
-    joint_gs_img_dir = os.path.join("..", "data", "gs_image_tensor.pt")
-    joint_rgb_img_dir = os.path.join("..", "data", "rgb_image_tensor.pt")
+    
+    data_path_base = os.path.join("data")
+    
+    name_audio_ds = "audio_tensor.pt"
+    
+    name_img_gs_ds = "gs_image_tensor.pt"
+    name_img_rgb_ds = "rgb_image_tensor.pt"
 
     # Save the grayscale version database
-    gs_dataset_path = os.path.join("..", "data", "DS_audio_gs.pt")
-    # build_dataset(joint_audio_dir, joint_gs_img_dir, gs_dataset_path)
+    name_audio_gs_dataset = "DS_audio_gs.pt"
+    build_dataset(
+        base_path=data_path_base, 
+        audio_set_path=name_audio_ds, 
+        img_set_path=name_img_gs_ds, 
+        output_path=name_audio_gs_dataset)
 
     # Repeat for RGB version if needed
-    rgb_dataset_path = os.path.join("..", "data", "DS_audio_rgb.pt")
-    # build_dataset(joint_audio_dir, joint_rgb_img_dir, rgb_dataset_path)
+    name_audio_rgb_dataset = "DS_audio_rgb.pt"
+    build_dataset(
+        base_path=data_path_base,
+        audio_set_path=name_audio_ds, 
+        img_set_path=name_img_rgb_ds, 
+        output_path=name_audio_rgb_dataset)
 
-    data_loarder_gs = build_dataloader(gs_dataset_path)
-    data_loarder_rgb = build_dataloader(rgb_dataset_path)
+    # data_loarder_gs = build_dataloader(gs_dataset_path)
+    # data_loarder_rgb = build_dataloader(rgb_dataset_path)

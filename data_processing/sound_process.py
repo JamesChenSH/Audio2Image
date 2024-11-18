@@ -100,8 +100,12 @@ def build_joint_sound_tensor(processed_dir, joint_dir):
 
 # Run the function with relative paths
 if __name__ == "__main__":
-    root_dir = os.path.join("..", "data", "sound")
-    processed_dir = os.path.join("..", "data", "audio_processed")
-    process_audio_files(root_dir, processed_dir)
-    joint_dir = os.path.join("..", "data", "audio_tensor.pt")
+    
+    dataset_folder = os.path.join("data")
+    
+    sound_root_dir = os.path.join(dataset_folder, "sound")
+    processed_dir = os.path.join(dataset_folder, "audio_processed")
+
+    process_audio_files(sound_root_dir, processed_dir)
+    joint_dir = os.path.join(dataset_folder, "audio_tensor.pt")
     build_joint_sound_tensor(processed_dir, joint_dir)
