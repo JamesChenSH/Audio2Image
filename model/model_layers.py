@@ -3,6 +3,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
+from tqdm import tqdm
 
 ############ Helpers ############
 
@@ -78,19 +79,14 @@ class FeedForwardLayer(nn.Module):
         self, 
         embedding_dim:int, 
         ff_dim:int, 
-        dropout_rate:float, 
-        activation:str="Relu"
+        dropout_rate:float
         ) -> None:
         super(FeedForwardLayer, self).__init__()
         self.dense1 = nn.Linear(embedding_dim, ff_dim)
         self.dense2 = nn.Linear(ff_dim, embedding_dim)
         self.dropout1 = nn.Dropout(dropout_rate)
         self.dropout2 = nn.Dropout(dropout_rate)
-        
-        if activation == "Relu":
-            self.activation = nn.ReLU()
-        else:
-            raise ValueError("Invalid activation function")
+        self.activation = nn.ReLU()
         
     def forward(self, x: torch.Tensor):
         x = self.dropout1(self.activation(self.dense1(x)))
@@ -346,7 +342,7 @@ class Audio2ImageModel(nn.Module):
         self.audio_sos, self.aud_eos, self.audio_pad = aud_special_tokens
         
         self.aud_pe = positional_encoding_sinusoidal(embedding_dim, 50).to(self.device)
-        self.img_pe = positional_encoding_sinusoidal(embedding_dim, 128*128).to(self.device)
+        self.img_pe = positional_encoding_sinusoidal(embedding_dim, 32*32).to(self.device)
         
         self.audio_embedding = TransformerLinearEmbedding(audio_depth, embedding_dim)             # [batch_size, aud_len, embedding_dim]
         self.img_embedding = TransformerValueEmbedding(img_depth, embedding_dim)                 # [batch_size, img_len, embedding_dim]
@@ -458,7 +454,7 @@ class Audio2ImageModel(nn.Module):
     ###############################
     #     Generation Functions    #
     ###############################
-    def generate_image(self, input_tokens:torch.Tensor, max_len:int=16384, min_len:int=16384):
+    def generate_image(self, input_tokens:torch.Tensor, max_len:int=1024, min_len:int=1024):
         """
         Generate image from audio input. Use Greedy Decode ATM.
         
@@ -473,8 +469,7 @@ class Audio2ImageModel(nn.Module):
         src_x = self.get_audio_embedding(input_tokens).to(self.device)
         encoded_src = self.encoder(src_x, src_mask)
         
-        for i in range(max_len):
-            print(f"Generation Step: {i}")
+        for i in tqdm(range(max_len)):
             # Generate Masks for Target Sequence
             tgt_causal_mask = self.generate_causal_mask(generation_seq).unsqueeze(0).repeat(generation_seq.size(0), 1, 1)
             tgt_padding_mask = self.generate_padding_mask(generation_seq).unsqueeze(1).repeat(1, generation_seq.size(1), 1)

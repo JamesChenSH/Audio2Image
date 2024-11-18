@@ -154,7 +154,6 @@ class Audio2Image():
         self.model.to(self.device)
         self.criterion.to(self.device)
         
-        passed_epochs = 0
         
         for epoch in range(self.epochs):
             self.model.train()
@@ -165,7 +164,6 @@ class Audio2Image():
             for audio, img in tqdm(training_dataloader):
                 audio = audio.to(self.device)
                 img = img.to(self.device)
-                
                 img = img.int()
                 
                 self.optimizer.zero_grad()
@@ -181,7 +179,7 @@ class Audio2Image():
                 loss = Variable(loss, requires_grad=True)
                 loss.backward()
             
-            print(f"== Training Loss: {total_loss}, Device: {self.device}")
+            print(f"== Training Loss: {loss / batch_size}, Device: {self.device}")
             
             self.model.eval()
             
@@ -190,6 +188,11 @@ class Audio2Image():
             with torch.no_grad():
                 for i, (audio, img) in enumerate(val_dataloader):
                     # Compare the predicted image with the actual image with some function
+                    
+                    audio = audio.to(self.device)
+                    img = img.to(self.device)
+                    img = img.int()
+                    
                     gen_img = self.model.generate_image(audio)
                     loss = self.validation_criterion(gen_img, img)
                     val_loss += loss
