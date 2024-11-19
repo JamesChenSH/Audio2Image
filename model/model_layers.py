@@ -491,7 +491,7 @@ class Audio2ImageModel(nn.Module):
                 break
         
         # TODO: Use softmax to get pixel value of entire image
-        img_out = generation_seq[:, 1:].log_softmax(dim=-1)
+        img_out = generation_seq[:, 1:].flatten()
 
         return img_out
             

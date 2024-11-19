@@ -20,7 +20,7 @@ class Audio2Image():
     def __init__(self,
         audio_depth:int = 2205, # [src_len, audio_depth]
         img_depth:int = 259, 
-        device:str = 'cpu',                     # 'cuda' or 'cpu' or 'mps'
+        device:str = 'cuda',                     # 'cuda' or 'cpu' or 'mps'
         embedding_dim:int = 512,                # 1024 for optimal
         encoder_head_num:int = 2,               
         decoder_head_num:int = 2,
@@ -223,10 +223,11 @@ class Audio2Image():
 if __name__ == "__main__":
 
     config = {
-        'batch size': 2,
+        'batch size': 8,
         'train ratio': 0.8,
         'validation ratio': 0.1,
         'test ratio': 0.1,
+        'device': 'cuda'
     }
 
     # Load the dataset
@@ -244,15 +245,15 @@ if __name__ == "__main__":
     val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)    
     test_dataloader = torch.utils.data.DataLoader(test, batch_size=config['batch size'], shuffle=True)
     
-    a2i_core = Audio2Image()
+    a2i_core = Audio2Image(device=config['device'])
     
     # Chack size of model
     # total_params = sum(p.numel() for p in a2i_core.model.parameters())
     # print(f"Number of parameters: {total_params}")
     
     # Test code
-    # audio_data = ds.audio_data.to(a2i_core.device)
-    # print(a2i_core.model.generate_image(audio_data[0].unsqueeze(0)))
+    audio_data = ds.audio_data.to(a2i_core.device)
+    print(a2i_core.model.generate_image(audio_data[0].unsqueeze(0)))
     
     # Train
-    a2i_core.train(train_dataloader, val_dataloader, batch_size=config['batch size'])
+    # a2i_core.train(train_dataloader, val_dataloader, batch_size=config['batch size'])
