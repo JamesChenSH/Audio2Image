@@ -454,7 +454,7 @@ class Audio2ImageModel(nn.Module):
     ###############################
     #     Generation Functions    #
     ###############################
-    def generate_image(self, input_tokens:torch.Tensor, max_len:int=1024, min_len:int=1024):
+    def generate_image(self, input_tokens:torch.Tensor, max_len:int=1024, min_len:int=1024, tqdm:bool=False):
         """
         Generate image from audio input. Use Greedy Decode ATM.
         
@@ -469,7 +469,12 @@ class Audio2ImageModel(nn.Module):
         src_x = self.get_audio_embedding(input_tokens).to(self.device)
         encoded_src = self.encoder(src_x, src_mask)
         
-        for i in tqdm(range(max_len)):
+        if tqdm:
+            iterative = tqdm(range(max_len))
+        else:
+            iterative = range(max_len)
+
+        for _ in iterative:
             # Generate Masks for Target Sequence
             tgt_causal_mask = self.generate_causal_mask(generation_seq).unsqueeze(0).repeat(generation_seq.size(0), 1, 1)
             tgt_padding_mask = self.generate_padding_mask(generation_seq).unsqueeze(1).repeat(1, generation_seq.size(1), 1)
@@ -491,7 +496,7 @@ class Audio2ImageModel(nn.Module):
                 break
         
         # TODO: Use softmax to get pixel value of entire image
-        img_out = generation_seq[:, 1:].flatten()
+        img_out = generation_seq[:, 1:]
 
         return img_out
             

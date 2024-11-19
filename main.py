@@ -143,6 +143,7 @@ class Audio2Image():
         training_dataloader:torch.utils.data.DataLoader,
         val_dataloader:torch.utils.data.DataLoader,
         batch_size: int = 8,
+        patience: int = 5
     ) -> None:
         '''
         Parameters:
@@ -153,7 +154,8 @@ class Audio2Image():
         '''
         self.model.to(self.device)
         self.criterion.to(self.device)
-        
+        lowest_val_loss = float('inf')
+        wait_count = 0
         
         for epoch in range(self.epochs):
             self.model.train()
@@ -195,9 +197,21 @@ class Audio2Image():
                     
                     gen_img = self.model.generate_image(audio)
                     loss = self.validation_criterion(gen_img, img)
-                    val_loss += loss
+                    val_loss += loss/val_dataloader.batch_size
+                
+                if val_loss < lowest_val_loss:
+                    lowest_val_loss = val_loss
+                    wait_count = 0
+                else:
+                    wait_count += 1
+                    if wait_count == patience:
+
+                        print(f"Early Stopping at Epoch: {epoch}")
+                        break
             
             print(f"== Validation Loss: {val_loss}, Device: {self.device}")
+        
+        print(f"Training Complete")
             
 
     def test(
@@ -212,10 +226,10 @@ class Audio2Image():
         test_loss = 0
         
         with torch.no_grad():
-            for i, (audio, img) in enumerate(testing_dataloader):
+            for audio, img in tqdm(testing_dataloader):
                 gen_img = self.model.generate_image(audio)
                 loss = self.validation_criterion(gen_img, img)
-                test_loss += loss
+                test_loss += loss/test_dataloader.batch_size
         
         print(f"Test Loss: {test_loss}, Device: {self.device}")             
 
@@ -223,7 +237,7 @@ class Audio2Image():
 if __name__ == "__main__":
 
     config = {
-        'batch size': 8,
+        'batch size': 16,
         'train ratio': 0.8,
         'validation ratio': 0.1,
         'test ratio': 0.1,
@@ -252,8 +266,15 @@ if __name__ == "__main__":
     # print(f"Number of parameters: {total_params}")
     
     # Test code
-    audio_data = ds.audio_data.to(a2i_core.device)
-    print(a2i_core.model.generate_image(audio_data[0].unsqueeze(0)))
+    # audio_data = ds.audio_data.to(a2i_core.device)
+    # print(a2i_core.model.generate_image(audio_data[0].unsqueeze(0)))
     
     # Train
-    # a2i_core.train(train_dataloader, val_dataloader, batch_size=config['batch size'])
+    a2i_core.train(train_dataloader, val_dataloader, batch_size=config['batch size'])
+    
+    # Test
+    a2i_core.test(test_dataloader)
+
+    # Save the model
+    model_path = "model/model.pt"
+    torch.save(a2i_core.model, 'model.pt')
