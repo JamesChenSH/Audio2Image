@@ -408,8 +408,8 @@ class Audio2ImageModel(nn.Module):
         padding_token = self.img_pad
         if use_audio:
             padding_token = self.audio_pad
-            return torch.all(torch.eq(x, padding_token), dim=-1)
-        return torch.eq(x, padding_token)
+            return torch.all(torch.eq(x, padding_token).to("cuda"), dim=-1).to("cuda")
+        return torch.eq(x, padding_token).to("cuda")
     
     
     def generate_causal_mask(self, x:torch.Tensor):
