@@ -126,12 +126,13 @@ class  Audio2Image():
         self.decoder = self.model.decoder
         
         # HyperParameters
-        self.learning_rate = 1e-3
+        self.label_smoothing = 0.1
+        self.learning_rate = 1e-4
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', factor=0.5, patience=10)
-        self.criterion = torch.nn.MSELoss()       
+        self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)       
         self.validation_criterion = ssim
-        self.epochs = 10
+        self.epochs = 30
         self.patience = 5
         
         
@@ -179,7 +180,7 @@ class  Audio2Image():
                 loss = Variable(loss, requires_grad=True)
                 loss.backward()
             
-            print(f"== Training Loss: {loss / batch_size}, Device: {self.device}")
+            print(f"== Training Loss: {total_loss / len(train_dataloader)}, Device: {self.device}")
             
             self.model.eval()
             
