@@ -289,4 +289,4 @@ if __name__ == "__main__":
 
     # Save the model
     model_path = "model/model.pt"
-    torch.save(a2i_core.model, 'model.pt')
+    torch.save(a2i_core.model, model_path)
