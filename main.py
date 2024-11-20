@@ -226,8 +226,16 @@ class  Audio2Image():
         
         with torch.no_grad():
             for audio, img in tqdm(testing_dataloader):
+                audio = audio.to(self.device)
+                img = img.to(self.device)
+                img = img.int()
+            
                 gen_img = self.model.generate_image(audio)
-                loss = self.validation_criterion(gen_img, img)
+
+                gen_img_np = gen_img.detach().cpu().numpy().astype(np.float32)
+                img_np = img.detach().cpu().numpy().astype(np.float32) 
+
+                loss = self.validation_criterion(gen_img_np, img_np, data_range=259.0)
                 test_loss += loss/test_dataloader.batch_size
         
         print(f"Test Loss: {test_loss}, Device: {self.device}")             
@@ -270,6 +278,11 @@ if __name__ == "__main__":
     
     # Train
     a2i_core.train(train_dataloader, val_dataloader, batch_size=config['batch size'])
+
+    
+    # Save the model
+    model_path = "model/model.pt"
+    torch.save(a2i_core.model, 'model.pt')
     
     # Test
     # a2i_core.test(test_dataloader)
