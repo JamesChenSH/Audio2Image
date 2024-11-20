@@ -327,12 +327,13 @@ class Audio2ImageModel(nn.Module):
         num_dec_layers:int, 
         img_special_token:tuple,
         aud_special_tokens:tuple,
-        device:str
+        device:str='cuda'
         ) -> None:
         super(Audio2ImageModel, self).__init__()
         
         self.img_depth = img_depth
         self.audio_depth = audio_depth
+        self.embedding_dim = embedding_dim  
         self.device = device
         
         self.encoder_head_num = encoder_head_num
@@ -423,7 +424,7 @@ class Audio2ImageModel(nn.Module):
         
         '''
         return torch.triu(torch.ones(x.size(1), x.size(1)), diagonal=1).bool().to(self.device)
-        
+
         
     ###############################
     #       Forward Function      #
@@ -454,7 +455,7 @@ class Audio2ImageModel(nn.Module):
     ###############################
     #     Generation Functions    #
     ###############################
-    def generate_image(self, input_tokens:torch.Tensor, max_len:int=1024, min_len:int=1024, tqdm:bool=False):
+    def generate_image(self, input_tokens:torch.Tensor, max_len:int=1024, min_len:int=1024, process_bar:bool=False):
         """
         Generate image from audio input. Use Greedy Decode ATM.
         
@@ -469,7 +470,7 @@ class Audio2ImageModel(nn.Module):
         src_x = self.get_audio_embedding(input_tokens).to(self.device)
         encoded_src = self.encoder(src_x, src_mask)
         
-        if tqdm:
+        if process_bar:
             iterative = tqdm(range(max_len))
         else:
             iterative = range(max_len)

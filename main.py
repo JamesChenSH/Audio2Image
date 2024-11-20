@@ -10,7 +10,7 @@ from typing import List
 from model.model_layers import Audio2ImageModel
 from data_processing.build_database import AudioImageDataset
 
-class Audio2Image():
+class  Audio2Image():
     '''
     The Wrapper class for Audio2Image model. We can define the structure of model here
     
@@ -120,7 +120,6 @@ class Audio2Image():
             self.device
         ).to(self.device)
         
-        self.model.to(self.device)
         print(f"Model created on device: {self.device}")
         
         self.encoder = self.model.encoder
@@ -128,12 +127,12 @@ class Audio2Image():
         
         # HyperParameters
         self.label_smoothing = 0.1
-        self.learning_rate = 1e-3
+        self.learning_rate = 1e-4
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', factor=0.5, patience=10)
         self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)       
         self.validation_criterion = ssim
-        self.epochs = 12
+        self.epochs = 3
         self.patience = 5
         
         
@@ -187,27 +186,27 @@ class Audio2Image():
             
             val_loss = 0
             
-            with torch.no_grad():
-                for i, (audio, img) in enumerate(val_dataloader):
-                    # Compare the predicted image with the actual image with some function
+            # with torch.no_grad():
+            #     for i, (audio, img) in enumerate(val_dataloader):
+            #         # Compare the predicted image with the actual image with some function
                     
-                    audio = audio.to(self.device)
-                    img = img.to(self.device)
-                    img = img.int()
+            #         audio = audio.to(self.device)
+            #         img = img.to(self.device)
+            #         img = img.int()
                     
-                    gen_img = self.model.generate_image(audio)
-                    loss = self.validation_criterion(gen_img, img)
-                    val_loss += loss/val_dataloader.batch_size
+            #         gen_img = self.model.generate_image(audio)
+            #         loss = self.validation_criterion(gen_img, img)
+            #         val_loss += loss/val_dataloader.batch_size
                 
-                if val_loss < lowest_val_loss:
-                    lowest_val_loss = val_loss
-                    wait_count = 0
-                else:
-                    wait_count += 1
-                    if wait_count == patience:
+            #     if val_loss < lowest_val_loss:
+            #         lowest_val_loss = val_loss
+            #         wait_count = 0
+            #     else:
+            #         wait_count += 1
+            #         if wait_count == patience:
 
-                        print(f"Early Stopping at Epoch: {epoch}")
-                        break
+            #             print(f"Early Stopping at Epoch: {epoch}")
+            #             break
             
             print(f"== Validation Loss: {val_loss}, Device: {self.device}")
         
@@ -241,7 +240,7 @@ if __name__ == "__main__":
         'train ratio': 0.8,
         'validation ratio': 0.1,
         'test ratio': 0.1,
-        'device': 'cuda'
+        'device': 'mps'
     }
 
     # Load the dataset
@@ -273,7 +272,7 @@ if __name__ == "__main__":
     a2i_core.train(train_dataloader, val_dataloader, batch_size=config['batch size'])
     
     # Test
-    a2i_core.test(test_dataloader)
+    # a2i_core.test(test_dataloader)
 
     # Save the model
     model_path = "model/model.pt"
