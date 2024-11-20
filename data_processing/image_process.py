@@ -170,8 +170,39 @@ def big_rgb_tensor():
     print("Total tensors loaded:", count)
 
 
+def convert_image_to_dataset(img_data_path, dataset_path):
+    count = 0
+    img_tensor_list = []
+    for dirpath, dirnames, filenames in os.walk(img_data_path):
+        for filename in filenames:
+            if filename == ".DS_Store":
+                continue
+            # Iterate through images
+            file_path = os.path.join(dirpath, filename)
+            # load grayscale image
+            image = Image.open(file_path).convert("L")
+            # resize
+            image = image.resize((32, 32))
+            # convert to tensor
+            transform = transforms.ToTensor()
+            img_tensor = transform(image)
+            # append to list
+            img_tensor = img_tensor.flatten()
+            img_tensor_list.append(img_tensor.unsqueeze(dim=0))
+            count += 1
+            
+    try:
+        img_tensor = torch.cat(img_tensor_list, dim=0)
+        print(img_tensor.shape)
+    except RuntimeError as e:
+        print(f"Error stacking tensors: {e}")
+        
+    torch.save(img_tensor, dataset_path)
+
+
 # Run the function with relative paths
 if __name__ == "__main__":
-    dimension_reduce()
-    big_gs_tensor()
-    big_rgb_tensor()
+    # dimension_reduce()
+    # big_gs_tensor()
+    # big_rgb_tensor()
+    convert_image_to_dataset("data/image_original", "data/DS_vision_gs1.pt")
