@@ -65,8 +65,16 @@ def process_audio_files(root_dir, target_dir):
                     fft_data, fft_freq = perform_fft(data_segment, sample_rate)
                     fft_data_segments.append(fft_data)
 
+                # Convert to a matrix
+                fft_data_matrix = np.array(fft_data_segments)
+
+                # Standardize the matrix (zero mean, unit variance)
+                mean_val = fft_data_matrix.mean()
+                std_val = fft_data_matrix.std()
+                standardized_fft_data_matrix = (fft_data_matrix - mean_val) / std_val
+
                 # Save FFT data and frequencies as a tensor file
-                save_as_tensor(np.array(fft_data_segments), fft_freq, curr_target_dir, filename)
+                save_as_tensor(np.array(standardized_fft_data_matrix), fft_freq, curr_target_dir, filename)
                 
                 count += 1
     print(f"Processed {count} audio files.")
