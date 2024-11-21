@@ -1,5 +1,6 @@
 import torch
 import torch.utils.data
+from torch.utils.data import Subset
 from torch.autograd import Variable
 
 from tqdm import tqdm
@@ -19,7 +20,7 @@ class  Audio2Image():
     '''
     def __init__(self,
         audio_depth:int = 2205, # [src_len, audio_depth]
-        img_depth:int = 259, 
+        img_depth:int = 256, 
         device:str = 'cuda',                     # 'cuda' or 'cpu' or 'mps'
         embedding_dim:int = 512,                # 1024 for optimal
         encoder_head_num:int = 2,               
@@ -127,15 +128,18 @@ class  Audio2Image():
         
         # HyperParameters
         self.label_smoothing = 0.1
-        self.learning_rate = 1e-4
+        self.learning_rate = 1
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9)
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min', factor=0.5, patience=10)
-        self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)       
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: self.lr_scheduler(self.embedding_dim, step, warmup=300))
+        self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing, reduction='mean')       
         self.validation_criterion = ssim
-        self.epochs = 30
+        self.epochs = 100
         self.patience = 5
         
-        
+    def lr_scheduler(self, dim_model: int, step:int, warmup:int):
+        if step == 0:
+            step = 1
+        return (dim_model ** -0.5) * min(step ** -0.5, step * warmup ** -1.5)
         
     def train(
         self,
@@ -165,24 +169,20 @@ class  Audio2Image():
             for audio, img in tqdm(training_dataloader):
                 audio = audio.to(self.device)
                 img = img.to(self.device)
-                img = img.int()
-                
-                self.optimizer.zero_grad()
                 # Input a shifted out_image to model as well as input audio
                 output = self.model(audio, img[:, :-1])
                 
                 # Outputs a predicted image
-                loss = self.criterion(torch.argmax(output, dim=-1).float(), img[:, 1:].float())
-                self.optimizer.step()
-                self.scheduler.step(loss)
-                total_loss += loss.item()
-
-                loss = Variable(loss, requires_grad=True)
+                loss = self.criterion(output.reshape(-1, output.shape[-1]), img[:, 1:].contiguous().view(-1))
+                self.optimizer.zero_grad()
                 loss.backward()
+                self.optimizer.step()
+                self.scheduler.step()
+                total_loss += loss.item()
             
             print(f"== Training Loss: {total_loss / len(train_dataloader)}, Device: {self.device}")
             
-            self.model.eval()
+            # self.model.eval()
             
             # val_loss = 0
             
@@ -244,7 +244,7 @@ class  Audio2Image():
 if __name__ == "__main__":
 
     config = {
-        'batch size': 16,
+        'batch size': 1,
         'train ratio': 0.8,
         'validation ratio': 0.1,
         'test ratio': 0.1,
@@ -252,16 +252,17 @@ if __name__ == "__main__":
     }
 
     # Load the dataset
-    ds_path = "data/DS_audio_gs.pt"
+    ds_path = "data/DS_audio_gs1.pt"
     ds = torch.load(ds_path)
     
     # Split Train, Val, Test
-    train_size = int(config['train ratio']*len(ds))
+    # train_size = int(config['train ratio']*len(ds))
+    train_size = 10
     val_size = int(config['validation ratio']*len(ds))
     test_size = len(ds) - train_size - val_size
     
     train, val, test = torch.utils.data.random_split(ds, [train_size, val_size, test_size])
-    
+    train = Subset(ds, range(1))
     train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
     val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)    
     test_dataloader = torch.utils.data.DataLoader(test, batch_size=config['batch size'], shuffle=True)
@@ -278,11 +279,6 @@ if __name__ == "__main__":
     
     # Train
     a2i_core.train(train_dataloader, val_dataloader, batch_size=config['batch size'])
-
-    
-    # Save the model
-    model_path = "model/model.pt"
-    torch.save(a2i_core.model, 'model.pt')
     
     # Test
     # a2i_core.test(test_dataloader)

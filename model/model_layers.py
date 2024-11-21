@@ -465,7 +465,7 @@ class Audio2ImageModel(nn.Module):
         Return: Image tokens [batch_size, img_len]        
         """
         
-        generation_seq = torch.zeros(input_tokens.size(0), 1, dtype=int).fill_(self.img_sos).to(self.device)
+        generation_seq = torch.zeros(input_tokens.size(0), 1, dtype=int).fill_(0).to(self.device)
         src_mask = self.generate_padding_mask(input_tokens, use_audio=True).to(self.device)
         src_x = self.get_audio_embedding(input_tokens).to(self.device)
         encoded_src = self.encoder(src_x, src_mask)
