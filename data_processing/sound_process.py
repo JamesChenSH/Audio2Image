@@ -99,12 +99,15 @@ def build_joint_sound_tensor(processed_dir, joint_dir):
         for file in files:
             try:
                 curr_tensor = torch.load(file)
-                tensor_list.append(curr_tensor.unsqueeze(dim=0))
+                tensor_list.append(curr_tensor)
                 count += 1
             except RuntimeError as e:
                 print(f"Error stacking tensors: {e}")
             
-    torch.save(tensor_list, joint_dir)
+    joint_tensor_list = torch.stack(tensor_list)  # Adds a new dimension
+    print(joint_tensor_list.shape)
+
+    torch.save(joint_tensor_list, joint_dir)
 
     print("Total tensors loaded:", count)
 
@@ -117,6 +120,6 @@ if __name__ == "__main__":
     sound_root_dir = os.path.join(dataset_folder, "sound")
     processed_dir = os.path.join(dataset_folder, "audio_processed")
 
-    process_audio_files(sound_root_dir, processed_dir)
+    # process_audio_files(sound_root_dir, processed_dir)
     joint_dir = os.path.join(dataset_folder, "audio_tensor.pt")
     build_joint_sound_tensor(processed_dir, joint_dir)
