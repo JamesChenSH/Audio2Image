@@ -9,7 +9,7 @@ class AudioImageDataset(Dataset):
     def __init__(self, audio_path, img_path):
         # Load the .pt files as tensors
         self.audio_data = torch.load(audio_path)
-        self.img_data = torch.load(img_path)
+        self.img_data = torch.load(img_path).long()
 
         # Ensure they have the same number of samples
         if len(self.audio_data) != len(self.img_data):
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     
     name_audio_ds = "audio_tensor.pt"
     
-    name_img_gs_ds = "gs_image_tensor.pt"
+    name_img_gs_ds = "DS_vision_gs1.pt"
     name_img_rgb_ds = "rgb_image_tensor.pt"
 
     # Save the grayscale version database
