@@ -84,24 +84,27 @@ def build_joint_sound_tensor(processed_dir, joint_dir):
     count = 0
     tensor_list = []
 
-    for dirpath, _, filenames in os.walk(processed_dir):
-        for filename in filenames:
-            if dirpath == processed_dir:
-                continue
+    # Get and sort all subfolders in the root folder
+    subfolders = [f.path for f in os.scandir(processed_dir) if f.is_dir()]
+    subfolders.sort()  # Sorting subfolders in lexicographical order
 
-            file_path = os.path.join(dirpath, filename)
-            curr_tensor = torch.load(file_path)
+    for subfolder in subfolders:
+        print(f"Reading files from: {subfolder}")
 
-            tensor_list.append(curr_tensor.unsqueeze(dim=0))
-            count += 1
+        # Get and sort all files in the current subfolder
+        files = [f.path for f in os.scandir(subfolder) if f.is_file()]
+        files.sort()  # Sorting files in lexicographical order
 
-    try:
-        tensor = torch.cat(tensor_list, dim=0)
-        print(tensor.shape)
-    except RuntimeError as e:
-        print(f"Error stacking tensors: {e}")
-
-    torch.save(tensor, joint_dir)
+        # Loop through each file in the current subfolder
+        for file in files:
+            try:
+                curr_tensor = torch.load(file)
+                tensor_list.append(curr_tensor.unsqueeze(dim=0))
+                count += 1
+            except RuntimeError as e:
+                print(f"Error stacking tensors: {e}")
+            
+    torch.save(tensor_list, joint_dir)
 
     print("Total tensors loaded:", count)
 
