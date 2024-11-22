@@ -133,7 +133,7 @@ class  Audio2Image():
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: self.lr_scheduler(self.embedding_dim, step, warmup=300))
         self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing, reduction='mean')       
         self.validation_criterion = ssim
-        self.epochs = 100
+        self.epochs = 5000
         self.patience = 5
         
     def lr_scheduler(self, dim_model: int, step:int, warmup:int):
@@ -248,16 +248,16 @@ if __name__ == "__main__":
         'train ratio': 0.8,
         'validation ratio': 0.1,
         'test ratio': 0.1,
-        'device': 'mps'
+        'device': 'cuda'
     }
 
     # Load the dataset
-    ds_path = "data/DS_audio_gs1.pt"
+    ds_path = "data/DS_audio_gs.pt"
     ds = torch.load(ds_path)
     
     # Split Train, Val, Test
     # train_size = int(config['train ratio']*len(ds))
-    train_size = 10
+    train_size = 4000
     val_size = int(config['validation ratio']*len(ds))
     test_size = len(ds) - train_size - val_size
     

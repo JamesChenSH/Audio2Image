@@ -173,14 +173,25 @@ def big_rgb_tensor():
 def convert_image_to_dataset(img_data_path, dataset_path):
     count = 0
     img_tensor_list = []
-    for dirpath, dirnames, filenames in os.walk(img_data_path):
-        for filename in filenames:
-            if filename == ".DS_Store":
+        # Get and sort all subfolders in the root folder
+    subfolders = [f.path for f in os.scandir(img_data_path) if f.is_dir()]
+    subfolders.sort()  # Sorting subfolders in lexicographical order
+
+    for subfolder in subfolders:
+        print(f"Reading files from: {subfolder}")
+
+        # Get and sort all files in the current subfolder
+        files = [f.path for f in os.scandir(subfolder) if f.is_file()]
+        files.sort()  # Sorting files in lexicographical order
+
+
+        for file in files:
+            if os.path.basename(file) == ".DS_Store":
                 continue
             # Iterate through images
-            file_path = os.path.join(dirpath, filename)
+            # file_path = os.path.join(dirpath, filename)
             # load grayscale image
-            image = Image.open(file_path).convert("L")
+            image = Image.open(file).convert("L")
             # resize
             image = image.resize((32, 32))
             # convert to tensor
@@ -193,6 +204,7 @@ def convert_image_to_dataset(img_data_path, dataset_path):
             
     try:
         img_tensor = torch.cat(img_tensor_list, dim=0)
+        img_tensor = img_tensor * 255
         print(img_tensor.shape)
     except RuntimeError as e:
         print(f"Error stacking tensors: {e}")
@@ -206,3 +218,5 @@ if __name__ == "__main__":
     # big_gs_tensor()
     # big_rgb_tensor()
     convert_image_to_dataset("data/image_original", "data/DS_vision_gs1.pt")
+
+    #print(torch.load("data/DS_vision_gs1.pt"))
