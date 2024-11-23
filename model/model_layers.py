@@ -455,7 +455,27 @@ class Audio2ImageModel(nn.Module):
     ###############################
     #     Generation Functions    #
     ###############################
-    def generate_image(self, input_tokens:torch.Tensor, max_len:int=1024, min_len:int=1024, process_bar:bool=False):
+    def sampling_alg(self, decoded_seq, top_p=0.8):
+        logits = decoded_seq[:, -1]
+        probs = torch.softmax(logits, dim=-1)
+        sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)
+        cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+        mask = cumulative_probs > top_p
+        if mask.size(0) > 1:
+            mask[:, 1:] = mask[:, :-1].clone()
+        mask[:, 0] = False  # Always keep the first token
+        sorted_probs[mask] = 0
+        sorted_probs /= sorted_probs.sum(dim=-1, keepdim=True)  # Renormalize probabilities
+
+        # Sample from the filtered distribution
+        next_token = torch.multinomial(sorted_probs, num_samples=1)
+
+        # Map sampled token indices back to original vocabulary
+        generated_token = sorted_indices.gather(dim=-1, index=next_token)
+        return generated_token
+
+
+    def generate_image(self, input_tokens:torch.Tensor, max_len:int=1024, min_len:int=1024, process_bar:bool=False, sampling=False):
         """
         Generate image from audio input. Use Greedy Decode ATM.
         
@@ -490,8 +510,10 @@ class Audio2ImageModel(nn.Module):
             
             
             decoded_seq = self.decoder(tgt_x, tgt_mask, encoded_src, src_mask)
-            
-            generated_token = decoded_seq[:, -1].argmax(dim=-1).unsqueeze(1)
+            if sampling == False:
+                generated_token = decoded_seq[:, -1].argmax(dim=-1).unsqueeze(1)
+            else:
+                generated_token = self.sampling_alg(decoded_seq, 0.8)
             generation_seq = torch.cat([generation_seq, generated_token], dim=1)
             if (generated_token == self.img_eos).all() and generation_seq.size(1) >= min_len:
                 break
@@ -502,4 +524,3 @@ class Audio2ImageModel(nn.Module):
         return img_out
             
             
-

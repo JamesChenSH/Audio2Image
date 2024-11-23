@@ -28,16 +28,16 @@ if __name__ == "__main__":
     ds_path = "data/DS_audio_gs.pt"
     ds = torch.load(ds_path)
     
-    a2i_model = torch.load('./model/model.pt', map_location='cpu')
-    a2i_model.device = 'cpu'
+    a2i_model = torch.load('./model/model.pt', map_location='cuda')
+    a2i_model.device = 'cuda'
     print(a2i_model.device)
     # Generate an image from the dataset
-    audio_data = ds.audio_data.to('cpu')
-    img_data = ds.img_data.to('cpu')
+    audio_data = ds.audio_data.to('cuda')
+    img_data = ds.img_data.to('cuda')
     
     tensor_to_gs_image(img_data[0].cpu()).show()
     
-    image = a2i_model.generate_image(audio_data[1].unsqueeze(0), process_bar=True)
+    image = a2i_model.generate_image(audio_data[0].unsqueeze(0), process_bar=True, sampling=True)
     
     # display the image
     print(image.shape)
