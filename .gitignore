@@ -3,3 +3,4 @@ __pycache__
 /data
 .idea
 model.pt
+model/model_100.pt

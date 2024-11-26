@@ -130,10 +130,11 @@ class  Audio2Image():
         self.label_smoothing = 0.1
         self.learning_rate = 1
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9)
-        self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: self.lr_scheduler(self.embedding_dim, step, warmup=300))
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: self.lr_scheduler(self.embedding_dim, step, warmup=30
+                                                                                                                    ))
         self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing, reduction='mean')       
         self.validation_criterion = ssim
-        self.epochs = 5000
+        self.epochs = 500
         self.patience = 5
         
     def lr_scheduler(self, dim_model: int, step:int, warmup:int):
@@ -248,7 +249,7 @@ class  Audio2Image():
 if __name__ == "__main__":
 
     config = {
-        'batch size': 1,
+        'batch size': 32,
         'train ratio': 0.8,
         'validation ratio': 0.1,
         'test ratio': 0.1,
@@ -265,7 +266,7 @@ if __name__ == "__main__":
     test_size = len(ds) - train_size - val_size
     
     train, val, test = torch.utils.data.random_split(ds, [train_size, val_size, test_size])
-    
+    # train = Subset(ds, range(1))
     train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
     val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)    
     test_dataloader = torch.utils.data.DataLoader(test, batch_size=config['batch size'], shuffle=True)
