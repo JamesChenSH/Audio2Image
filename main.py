@@ -157,8 +157,8 @@ class  Audio2Image():
         '''
         self.model.to(self.device)
         self.criterion.to(self.device)
-        lowest_val_loss = float('inf')
-        wait_count = 0
+        
+        cached_param = None
         
         for epoch in range(self.epochs):
             self.model.train()
@@ -182,33 +182,37 @@ class  Audio2Image():
             
             print(f"== Training Loss: {total_loss / len(train_dataloader)}, Device: {self.device}")
             
-            # self.model.eval()
+            self.model.eval()
+            lowest_val_loss = float('inf')
+            wait_count = 0
+            val_loss = 0
             
-            # val_loss = 0
-            
-            # with torch.no_grad():
-            #     for i, (audio, img) in enumerate(val_dataloader):
-            #         # Compare the predicted image with the actual image with some function
+            with torch.no_grad():
+                for i, (audio, img) in enumerate(val_dataloader):
+                    # Compare the predicted image with the actual image with some function
                     
-            #         audio = audio.to(self.device)
-            #         img = img.to(self.device)
-            #         img = img.int()
+                    audio = audio.to(self.device)
+                    img = img.to(self.device)
+                    img = img.int()
                     
-            #         gen_img = self.model.generate_image(audio)
-            #         loss = self.validation_criterion(gen_img, img)
-            #         val_loss += loss/val_dataloader.batch_size
+                    gen_img = self.model(audio, img[:, :-1])
+                    loss = self.criterion(gen_img.reshape(-1, gen_img.shape[-1]), img[:, 1:].contiguous().view(-1))
+                    val_loss += loss.item()
                 
-            #     if val_loss < lowest_val_loss:
-            #         lowest_val_loss = val_loss
-            #         wait_count = 0
-            #     else:
-            #         wait_count += 1
-            #         if wait_count == patience:
+                val_loss /= len(val_dataloader)
+                
+                if val_loss < lowest_val_loss:
+                    lowest_val_loss = val_loss
+                    wait_count = 0
+                    cached_param = self.model.state_dict()
+                else:
+                    wait_count += 1
+                    if wait_count == patience:
 
-            #             print(f"Early Stopping at Epoch: {epoch}")
-            #             break
+                        print(f"Early Stopping at Epoch: {epoch}")
+                        break
             
-            # print(f"== Validation Loss: {val_loss}, Device: {self.device}")
+            print(f"== Validation Loss: {val_loss}, Device: {self.device}")
         
         print(f"Training Complete")
             
@@ -256,13 +260,12 @@ if __name__ == "__main__":
     ds = torch.load(ds_path)
     
     # Split Train, Val, Test
-    # train_size = int(config['train ratio']*len(ds))
-    train_size = 4000
+    train_size = int(config['train ratio']*len(ds))
     val_size = int(config['validation ratio']*len(ds))
     test_size = len(ds) - train_size - val_size
     
     train, val, test = torch.utils.data.random_split(ds, [train_size, val_size, test_size])
-    train = Subset(ds, range(1))
+    
     train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
     val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)    
     test_dataloader = torch.utils.data.DataLoader(test, batch_size=config['batch size'], shuffle=True)
@@ -281,8 +284,8 @@ if __name__ == "__main__":
     a2i_core.train(train_dataloader, val_dataloader, batch_size=config['batch size'])
     
     # Test
-    # a2i_core.test(test_dataloader)
+    a2i_core.test(test_dataloader)
 
     # Save the model
     model_path = "model/model.pt"
-    torch.save(a2i_core.model, model_path)
+    torch.save(a2i_core.model.state_dict(), model_path)

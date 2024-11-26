@@ -58,7 +58,7 @@ if __name__ == "__main__":
     
     name_audio_ds = "audio_tensor.pt"
     
-    name_img_gs_ds = "DS_vision_gs1.pt"
+    name_img_gs_ds = "gs_image_tensor.pt"
     name_img_rgb_ds = "rgb_image_tensor.pt"
 
     # Save the grayscale version database
