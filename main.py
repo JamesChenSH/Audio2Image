@@ -2,6 +2,7 @@ import torch
 import torch.utils.data
 from torch.utils.data import Subset
 from torch.autograd import Variable
+import numpy as np
 
 from tqdm import tqdm
 from skimage.metrics import structural_similarity as ssim
@@ -32,7 +33,10 @@ class  Audio2Image():
         encoder_attn_dropout:float = 0.0,
         decoder_attn_dropout:float = 0.0, 
         num_enc_layers:int = 2,                 # 12 for optimal
-        num_dec_layers:int = 2                  # 12 for optimal  
+        num_dec_layers:int = 2,                  # 12 for optimal  
+        
+        epochs:int = 100,
+        patience:int = 5
     ):
         """
         This is the main model for the Audio 2 Image project. We only need to build this once
@@ -85,6 +89,9 @@ class  Audio2Image():
         self.num_enc_layers = num_enc_layers
         self.num_dec_layers = num_dec_layers
         
+        self.epochs = epochs
+        self.patience = patience
+        
         if device == 'cuda' and torch.cuda.is_available():
             self.device = "cuda"
         elif device == 'mps':
@@ -134,8 +141,6 @@ class  Audio2Image():
                                                                                                                     ))
         self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing, reduction='mean')       
         self.validation_criterion = ssim
-        self.epochs = 500
-        self.patience = 5
         
     def lr_scheduler(self, dim_model: int, step:int, warmup:int):
         if step == 0:
@@ -209,9 +214,8 @@ class  Audio2Image():
                 else:
                     wait_count += 1
                     if wait_count == patience:
-
-                        print(f"Early Stopping at Epoch: {epoch}")
-                        break
+                        print("Checkpoint Saved")
+                        torch.save(cached_param, "model/checkpoint.pt")
             
             print(f"== Validation Loss: {val_loss}, Device: {self.device}")
         
@@ -222,6 +226,8 @@ class  Audio2Image():
         self,
         testing_dataloader:torch.utils.data.DataLoader
     ):
+        
+        print(f"== Testing Model ==")
         self.model.to(self.device)
         self.criterion.to(self.device)
         
@@ -235,7 +241,7 @@ class  Audio2Image():
                 img = img.to(self.device)
                 img = img.int()
             
-                gen_img = self.model.generate_image(audio)
+                gen_img = self.model.generate_image(audio, sampling=True)
 
                 gen_img_np = gen_img.detach().cpu().numpy().astype(np.float32)
                 img_np = img.detach().cpu().numpy().astype(np.float32) 
@@ -253,12 +259,14 @@ if __name__ == "__main__":
         'train ratio': 0.8,
         'validation ratio': 0.1,
         'test ratio': 0.1,
-        'device': 'cuda'
+        'device': 'cuda',
+        'epochs': 5
     }
 
     # Load the dataset
     ds_path = "data/DS_audio_gs.pt"
     ds = torch.load(ds_path)
+    ds = Subset(ds, range(1000))
     
     # Split Train, Val, Test
     train_size = int(config['train ratio']*len(ds))
@@ -266,27 +274,27 @@ if __name__ == "__main__":
     test_size = len(ds) - train_size - val_size
     
     train, val, test = torch.utils.data.random_split(ds, [train_size, val_size, test_size])
-    # train = Subset(ds, range(1))
     train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
     val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)    
     test_dataloader = torch.utils.data.DataLoader(test, batch_size=config['batch size'], shuffle=True)
     
-    a2i_core = Audio2Image(device=config['device'])
+    a2i_core = Audio2Image(device=config['device'], epochs=config['epochs'], patience=5)
     
     # Chack size of model
-    # total_params = sum(p.numel() for p in a2i_core.model.parameters())
-    # print(f"Number of parameters: {total_params}")
+    total_params = sum(p.numel() for p in a2i_core.model.parameters())
+    print(f"Number of parameters: {total_params}")
     
-    # Test code
+    # # Test code
     # audio_data = ds.audio_data.to(a2i_core.device)
     # print(a2i_core.model.generate_image(audio_data[0].unsqueeze(0)))
     
     # Train
     a2i_core.train(train_dataloader, val_dataloader, batch_size=config['batch size'])
     
-    # Test
-    a2i_core.test(test_dataloader)
-
     # Save the model
     model_path = "model/model.pt"
     torch.save(a2i_core.model.state_dict(), model_path)
+    
+    # Test
+    a2i_core.test(test_dataloader)
+
