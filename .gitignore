@@ -4,3 +4,5 @@ __pycache__
 .idea
 model.pt
 model/model_100.pt
+/venv
+*.code-workspace
