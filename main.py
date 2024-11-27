@@ -199,7 +199,6 @@ class  Audio2Image():
                     
                     audio = audio.to(self.device)
                     img = img.to(self.device)
-                    img = img.int()
                     
                     gen_img = self.model(audio, img[:, :-1])
                     loss = self.criterion(gen_img.reshape(-1, gen_img.shape[-1]), img[:, 1:].contiguous().view(-1))
@@ -215,7 +214,7 @@ class  Audio2Image():
                     wait_count += 1
                     if wait_count == patience:
                         print("Checkpoint Saved")
-                        torch.save(cached_param, "model/checkpoint.pt")
+                        torch.save(cached_param, f"model/checkpoint_epoch_{epoch}_loss{round(val_loss, 5)}.pt")
             
             print(f"== Validation Loss: {val_loss}, Device: {self.device}")
         
