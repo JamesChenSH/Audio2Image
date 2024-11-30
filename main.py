@@ -217,7 +217,7 @@ class  Audio2Image():
                         torch.save(cached_param, f"model/checkpoint_epoch_{epoch}_loss{round(val_loss, 5)}.pt")
             
             print(f"== Validation Loss: {val_loss}, Device: {self.device}")
-        
+        torch.save(cached_param, f"model/checkpoint_last_epoch_{epoch}_loss{round(val_loss, 5)}.pt")
         print(f"Training Complete")
             
 
