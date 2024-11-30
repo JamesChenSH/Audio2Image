@@ -23,17 +23,17 @@ class  Audio2Image():
         audio_depth:int = 2205, # [src_len, audio_depth]
         img_depth:int = 256, 
         device:str = 'cuda',                     # 'cuda' or 'cpu' or 'mps'
-        embedding_dim:int = 512,                # 1024 for optimal
+        embedding_dim:int = 1024,                # 1024 for optimal
         encoder_head_num:int = 2,               
         decoder_head_num:int = 2,
-        encoder_ff_dim:int = 4*512,             # 4*1024 for optimal
-        decoder_ff_dim:int = 4*512,             # 4*1024 for optimal
+        encoder_ff_dim:int = 4*1024,             # 4*1024 for optimal
+        decoder_ff_dim:int = 4*1024,             # 4*1024 for optimal
         encoder_dropout_rate:float = 0.1, 
         decoder_dropout_rate:float = 0.1,
         encoder_attn_dropout:float = 0.0,
         decoder_attn_dropout:float = 0.0, 
-        num_enc_layers:int = 2,                 # 12 for optimal
-        num_dec_layers:int = 2,                  # 12 for optimal  
+        num_enc_layers:int = 6,                 # 12 for optimal
+        num_dec_layers:int = 6,                  # 12 for optimal  
         
         epochs:int = 100,
         patience:int = 5
@@ -259,7 +259,7 @@ if __name__ == "__main__":
         'validation ratio': 0.1,
         'test ratio': 0.1,
         'device': 'cuda',
-        'epochs': 5
+        'epochs': 100
     }
 
     # Load the dataset
