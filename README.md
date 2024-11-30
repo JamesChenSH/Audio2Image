@@ -24,5 +24,5 @@ press ctrl+b first, then quickly press d, once.
 
 To re-mount the terminal:
 ```
-tmux attach <termial name>
+tmux attach -s <termial name>
 ```
