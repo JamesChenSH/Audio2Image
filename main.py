@@ -265,7 +265,6 @@ if __name__ == "__main__":
     # Load the dataset
     ds_path = "data/DS_audio_gs.pt"
     ds = torch.load(ds_path)
-    ds = Subset(ds, range(1000))
     
     # Split Train, Val, Test
     train_size = int(config['train ratio']*len(ds))

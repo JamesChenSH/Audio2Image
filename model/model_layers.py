@@ -174,7 +174,7 @@ class DecoderTransformerBlock(nn.Module):
         self.self_attention_score = None
         self.cross_attention_score = None
     
-    def forward(self, decoder_x:torch.Tensor, encoder_x:torch.Tensor, encoder_mask: torch.Tensor):
+    def forward(self, decoder_x:torch.Tensor, decoder_mask: torch.Tensor, encoder_x:torch.Tensor, encoder_mask: torch.Tensor):
         """ 
         Post Layer Add&Norm as in original Transformer Paper 
         
@@ -186,7 +186,7 @@ class DecoderTransformerBlock(nn.Module):
         """
         
         # Self Attention - Use causal mask
-        self_attention_output, self_attention_score = self.selfAttention(decoder_x, decoder_x, decoder_x, need_weights=self.need_weights, is_causal=True)
+        self_attention_output, self_attention_score = self.selfAttention(decoder_x, decoder_x, decoder_x, need_weights=self.need_weights, attn_mask=decoder_mask)
         # Layer Normalization
         self_attention_layer_norm_output = self.layerNorm1(self.selfAttentionDropout(self_attention_output) + decoder_x)
         # Cross Attention - Use padding mask
@@ -280,7 +280,7 @@ class TransformerDecoder(nn.Module):
         self.linearLayer = DecoderLinearLayer(embedding_dim, img_depth)
     
     
-    def forward(self, decoder_x:torch.Tensor, encoder_x:torch.Tensor, encoder_mask:torch.Tensor):
+    def forward(self, decoder_x:torch.Tensor, decoder_mask:torch.Tensor, encoder_x:torch.Tensor, encoder_mask:torch.Tensor):
         """
         decoder_x: Decoder input  [batch_size, tgt_len, embedding_dim]
         encoder_x: Encoder output [batch_size, src_len, embedding_dim]
@@ -289,7 +289,7 @@ class TransformerDecoder(nn.Module):
         """
         decoder_x = self.layerNorm(decoder_x)
         for layer in self.layers:
-            decoder_x = layer(decoder_x, encoder_x, encoder_mask)
+            decoder_x = layer(decoder_x, decoder_mask, encoder_x, encoder_mask)
         decoder_x = self.linearLayer(decoder_x)
         return decoder_x
 
@@ -496,11 +496,18 @@ class Audio2ImageModel(nn.Module):
             iterative = range(max_len)
 
         for _ in iterative:
+            tgt_causal_mask = self.generate_causal_mask(generation_seq).unsqueeze(0).repeat(generation_seq.size(0), 1, 1)
+            tgt_padding_mask = self.generate_padding_mask(generation_seq).unsqueeze(1).repeat(1, generation_seq.size(1), 1)
+            tgt_mask = tgt_causal_mask | tgt_padding_mask
             
+            # print(tgt_mask.shape)
+            tgt_mask = tgt_mask.unsqueeze(1).repeat(1, self.decoder_head_num, 1, 1)
+            # print(tgt_mask.shape)
+            tgt_mask = tgt_mask.view(-1, tgt_mask.size(2), tgt_mask.size(3))        
             # print(tgt_mask.shape)
             tgt_x = self.get_img_embedding(generation_seq)
             
-            decoded_seq = self.decoder(tgt_x, encoded_src, src_mask)
+            decoded_seq = self.decoder(tgt_x, tgt_mask, encoded_src, src_mask)
             if sampling == False:
                 generated_token = decoded_seq[:, -1].argmax(dim=-1).unsqueeze(1)
             else:
