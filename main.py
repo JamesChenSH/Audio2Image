@@ -32,8 +32,8 @@ class  Audio2Image():
         decoder_dropout_rate:float = 0.1,
         encoder_attn_dropout:float = 0.0,
         decoder_attn_dropout:float = 0.0, 
-        num_enc_layers:int = 6,                 # 12 for optimal
-        num_dec_layers:int = 6,                  # 12 for optimal  
+        num_enc_layers:int = 3,                 # 12 for optimal
+        num_dec_layers:int = 3,                  # 12 for optimal  
         
         epochs:int = 100,
         patience:int = 5
@@ -135,7 +135,7 @@ class  Audio2Image():
         
         # HyperParameters
         self.label_smoothing = 0.1
-        self.learning_rate = 1
+        self.learning_rate = 1e-4
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9)
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: self.lr_scheduler(self.embedding_dim, step, warmup=30
                                                                                                                     ))
