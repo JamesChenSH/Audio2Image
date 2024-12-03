@@ -179,6 +179,9 @@ def convert_image_to_dataset(img_data_path, dataset_path):
 
     for subfolder in subfolders:
         print(f"Reading files from: {subfolder}")
+        if (subfolder != "data/image_original\\airport"):
+            print("skipping")
+            continue
 
         # Get and sort all files in the current subfolder
         files = [f.path for f in os.scandir(subfolder) if f.is_file()]
@@ -217,6 +220,7 @@ if __name__ == "__main__":
     # dimension_reduce()
     # big_gs_tensor()
     # big_rgb_tensor()
-    convert_image_to_dataset("data/image_original", "data/DS_vision_gs1.pt")
+    convert_image_to_dataset("data/image_original", "data/image_airport_tensor.pt")
+    
 
     #print(torch.load("data/DS_vision_gs1.pt"))

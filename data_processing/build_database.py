@@ -56,13 +56,13 @@ if __name__ == "__main__":
     
     data_path_base = os.path.join("data")
     
-    name_audio_ds = "audio_tensor.pt"
+    name_audio_ds = "audio_airport_tensor.pt"
     
-    name_img_gs_ds = "gs_image_tensor.pt"
-    name_img_rgb_ds = "rgb_image_tensor.pt"
+    name_img_gs_ds = "image_airport_tensor.pt"
+    # name_img_rgb_ds = "rgb_image_tensor.pt"
 
     # Save the grayscale version database
-    name_audio_gs_dataset = "DS_audio_gs.pt"
+    name_audio_gs_dataset = "DS_airport.pt"
     build_dataset(
         base_path=data_path_base, 
         audio_set_path=name_audio_ds, 
@@ -70,12 +70,12 @@ if __name__ == "__main__":
         output_path=name_audio_gs_dataset)
 
     # Repeat for RGB version if needed
-    name_audio_rgb_dataset = "DS_audio_rgb.pt"
-    build_dataset(
-        base_path=data_path_base,
-        audio_set_path=name_audio_ds, 
-        img_set_path=name_img_rgb_ds, 
-        output_path=name_audio_rgb_dataset)
+    # name_audio_rgb_dataset = "DS_audio_rgb.pt"
+    # build_dataset(
+    #     base_path=data_path_base,
+    #     audio_set_path=name_audio_ds, 
+    #     img_set_path=name_img_rgb_ds, 
+    #     output_path=name_audio_rgb_dataset)
 
     # data_loarder_gs = build_dataloader(gs_dataset_path)
     # data_loarder_rgb = build_dataloader(rgb_dataset_path)

@@ -90,6 +90,9 @@ def build_joint_sound_tensor(processed_dir, joint_dir):
 
     for subfolder in subfolders:
         print(f"Reading files from: {subfolder}")
+        if (subfolder != "data\\audio_processed\\airport"):
+            print("skipping")
+            continue
 
         # Get and sort all files in the current subfolder
         files = [f.path for f in os.scandir(subfolder) if f.is_file()]
@@ -121,5 +124,5 @@ if __name__ == "__main__":
     processed_dir = os.path.join(dataset_folder, "audio_processed")
 
     # process_audio_files(sound_root_dir, processed_dir)
-    joint_dir = os.path.join(dataset_folder, "audio_tensor.pt")
+    joint_dir = os.path.join(dataset_folder, "audio_airport_tensor.pt")
     build_joint_sound_tensor(processed_dir, joint_dir)
