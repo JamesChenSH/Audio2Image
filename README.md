@@ -1,2 +1,14 @@
 # Audio2Image
 This is the course project for CSC2541 Generative AI in Machine Learning at University of Toronto
+
+
+## Dataset
+We use the audio - image corresponding datasets here:
+https://zenodo.org/records/3828124
+
+## Method to use Slurm Cluster
+After ssh into comps0.cs.toronto.edu from cs.toronto.edu, run:
+
+```
+srun --partition=gpunodes -c 1 --mem=16G --gres=gpu:rtx_4090:1 -t 5-0 --pty <bash_name.sh>
+```

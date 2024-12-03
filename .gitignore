@@ -1,0 +1,8 @@
+__pycache__
+.DS_Store
+/data
+.idea
+model.pt
+model/model_100.pt
+/venv
+*.code-workspace
