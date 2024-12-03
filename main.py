@@ -326,7 +326,7 @@ if __name__ == "__main__":
         'test ratio': 0.1,
         'device': 'cuda',
         'epochs': 2000,
-        'lr': 1
+        'lr': 0.001
     }
 
     a2i_core = Audio2Image(device=config['device'], epochs=config['epochs'], patience=5, lr=config['lr'])
