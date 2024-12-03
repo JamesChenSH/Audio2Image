@@ -36,8 +36,8 @@ class  Audio2Image():
         decoder_dropout_rate:float = 0.1,
         encoder_attn_dropout:float = 0.0,
         decoder_attn_dropout:float = 0.0, 
-        num_enc_layers:int = 6,                 # 12 for optimal
-        num_dec_layers:int = 6,                  # 12 for optimal  
+        num_enc_layers:int = 3,                 # 12 for optimal
+        num_dec_layers:int = 3,                  # 12 for optimal  
         
         epochs:int = 100,
         patience:int = 5
