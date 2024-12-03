@@ -1,4 +1,4 @@
-import torch
+import torch, os
 import torch.utils.data
 from torch.utils.data import Subset
 from torch.autograd import Variable
@@ -13,8 +13,7 @@ from typing import List
 from model.model_layers import Audio2ImageModel
 from data_processing.build_database import AudioImageDataset
 
-from pytorch_lightning import Trainer
-from pytorch_lightning.tuner.tuning import lr_find
+torch.manual_seed(0)
 
 class  Audio2Image():
     '''
@@ -27,20 +26,21 @@ class  Audio2Image():
         audio_depth:int = 2205, # [src_len, audio_depth]
         img_depth:int = 256, 
         device:str = 'cuda',                     # 'cuda' or 'cpu' or 'mps'
-        embedding_dim:int = 1024,                # 1024 for optimal
-        encoder_head_num:int = 2,               
-        decoder_head_num:int = 2,
-        encoder_ff_dim:int = 4*1024,             # 4*1024 for optimal
-        decoder_ff_dim:int = 4*1024,             # 4*1024 for optimal
+        embedding_dim:int = 512,                # 1024 for optimal
+        encoder_head_num:int = 8,               
+        decoder_head_num:int = 8, 
+        encoder_ff_dim:int = 4*512,             # 4*1024 for optimal
+        decoder_ff_dim:int = 4*512,             # 4*1024 for optimal
         encoder_dropout_rate:float = 0.1, 
         decoder_dropout_rate:float = 0.1,
-        encoder_attn_dropout:float = 0.0,
-        decoder_attn_dropout:float = 0.0, 
-        num_enc_layers:int = 3,                 # 12 for optimal
-        num_dec_layers:int = 3,                  # 12 for optimal  
+        encoder_attn_dropout:float = 0.1,
+        decoder_attn_dropout:float = 0.1, 
+        num_enc_layers:int = 6,                 # 12 for optimal
+        num_dec_layers:int = 6,                  # 12 for optimal  
         
         epochs:int = 100,
-        patience:int = 5
+        patience:int = 5,
+        lr:int = 1e-4
     ):
         """
         This is the main model for the Audio 2 Image project. We only need to build this once
@@ -139,10 +139,10 @@ class  Audio2Image():
         
         # HyperParameters
         self.label_smoothing = 0.1
-        self.learning_rate = 1e-4
+        self.learning_rate = lr
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9)
-        self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: self.lr_scheduler(self.embedding_dim, step, warmup=30
-                                                                                                                    ))
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, 
+                                lr_lambda=lambda step: self.lr_scheduler(self.embedding_dim, step, warmup=30))
         self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing, reduction='mean')       
         self.validation_criterion = ssim
         
@@ -155,6 +155,7 @@ class  Audio2Image():
         self,
         training_dataloader:torch.utils.data.DataLoader,
         val_dataloader:torch.utils.data.DataLoader,
+        model_dir:str,
         patience: int = 5
     ) -> None:
         '''
@@ -168,6 +169,8 @@ class  Audio2Image():
         self.criterion.to(self.device)
         
         cached_param = None
+        lowest_val_loss = float('inf')
+        wait_count = 0
         
         for epoch in range(self.epochs):
             self.model.train()
@@ -192,8 +195,6 @@ class  Audio2Image():
             print(f"== Training Loss: {total_loss / len(train_dataloader)}, Device: {self.device}")
             
             self.model.eval()
-            lowest_val_loss = float('inf')
-            wait_count = 0
             val_loss = 0
             
             with torch.no_grad():
@@ -215,9 +216,10 @@ class  Audio2Image():
                     cached_param = self.model.state_dict()
                 else:
                     wait_count += 1
+                    print(f"Waiting: {wait_count}")
                     if wait_count == patience:
                         print("Checkpoint Saved")
-                        torch.save(cached_param, f"model/checkpoint_epoch_{epoch}_loss{round(val_loss, 5)}.pt")
+                        torch.save(cached_param, f"{model_dir}/checkpoint_epoch_{epoch}_loss{round(val_loss, 5)}.pt")
             
             print(f"== Validation Loss: {val_loss}, Device: {self.device}")
         torch.save(cached_param, f"model/checkpoint_last_epoch_{epoch}_loss{round(val_loss, 5)}.pt")
@@ -259,15 +261,25 @@ class  Audio2Image():
 
 
 def learning_rate_finder(model, training_loader, min_lr, max_lr):
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=min_lr)
+    
+    def lr_scheduler(dim_model: int, step:int, warmup:int):
+        if step == 0:
+            step = 1
+        return (dim_model ** -0.5) * min(step ** -0.5, step * warmup ** -1.5)
+    
+    
+    criterion = torch.nn.CrossEntropyLoss(label_smoothing=0.1, reduction='mean')
+    optimizer = torch.optim.Adam(model.parameters(), lr=min_lr, betas=(0.9, 0.98), eps=1e-9)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: lr_scheduler(512, step, warmup=300))
     cur_lr = min_lr
     num_iter = len(training_loader)
-    
+    model = model.to("cuda")
     lrs = []
     losses = []
     
-    for step, (inputs, targets) in enumerate(training_loader):
+    for step, (inputs, targets) in tqdm(enumerate(training_loader)):
+        inputs = inputs.to("cuda")
+        targets = targets.to("cuda")
         if step >= num_iter:
             break
         
@@ -284,9 +296,11 @@ def learning_rate_finder(model, training_loader, min_lr, max_lr):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        scheduler.step()
     
     import matplotlib.pyplot as plt
     plt.plot(lrs, losses)
+    print(lrs, losses)
     plt.xscale('log')
     plt.xlabel('LR')
     plt.ylabel('Loss')
@@ -311,10 +325,11 @@ if __name__ == "__main__":
         'validation ratio': 0.1,
         'test ratio': 0.1,
         'device': 'cuda',
-        'epochs': 1000
+        'epochs': 2000,
+        'lr': 1
     }
 
-    a2i_core = Audio2Image(device=config['device'], epochs=config['epochs'], patience=5)
+    a2i_core = Audio2Image(device=config['device'], epochs=config['epochs'], patience=5, lr=config['lr'])
     
     # Load the dataset
     ds_path = "data/DS_airport.pt"
@@ -326,12 +341,14 @@ if __name__ == "__main__":
     test_size = len(ds) - train_size - val_size
     
     train, val, test = torch.utils.data.random_split(ds, [train_size, val_size, test_size])
+    # train = Subset(train, range(1))
     train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
     val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)    
     test_dataloader = torch.utils.data.DataLoader(test, batch_size=config['batch size'], shuffle=True)
     
     if args.find_lr:
         # Find correct LR for model.
+        learning_rate_finder(a2i_core.model, train_dataloader, 1e-5, 0.1)
         exit()
     
     # Chack size of model
@@ -342,11 +359,13 @@ if __name__ == "__main__":
     # audio_data = ds.audio_data.to(a2i_core.device)
     # print(a2i_core.model.generate_image(audio_data[0].unsqueeze(0)))
     
+    model_dir = f"model/model_dim_{a2i_core.embedding_dim}_layer_enc_{a2i_core.num_enc_layers}_dec_{a2i_core.num_dec_layers}"
+    if not os.path.isdir(model_dir):
+        os.mkdir(model_dir)
     # Train
-    a2i_core.train(train_dataloader, val_dataloader)
-    
+    a2i_core.train(train_dataloader, val_dataloader, model_dir)
     # Save the model
-    model_path = "model/model.pt"
+    model_path = f"{model_dir}/model_bs_{config['batch size']}_lr_{config['lr']}.pt"
     torch.save(a2i_core.model.state_dict(), model_path)
     
     # Test
