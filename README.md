@@ -10,6 +10,8 @@ https://zenodo.org/records/3828124
 After ssh into comps0.cs.toronto.edu from cs.toronto.edu, run:
 
 ```
+source /w/247/jameschen/Audio2Image/venv/bin/activate
+
 srun --partition=gpunodes -c 1 --mem=16G --gres=gpu:rtx_4090:1 -t 5-0 --pty <bash_name.sh>
 ```
 
@@ -24,5 +26,5 @@ press ctrl+b first, then quickly press d, once.
 
 To re-mount the terminal:
 ```
-tmux attach -s <termial name>
+tmux attach -t <termial name>
 ```
