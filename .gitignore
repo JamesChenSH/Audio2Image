@@ -6,3 +6,10 @@ model.pt
 model/model_100.pt
 /venv
 *.code-workspace
+model/checkpoint_last_epoch_99_loss5.29092_2024_11_29.pt
+model/checkpoint_last_epoch_99_loss5.11468.pt
+model/checkpoint_last_epoch_99_loss5.29092_2024_11_29.pt
+output.png
+model/checkpoint_last_epoch_99_loss5.29092_2024_11_29.pt
+model/checkpoint_last_epoch_99_loss5.29092_2024_11_29.pt
+*.pt

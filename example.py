@@ -27,9 +27,14 @@ if __name__ == "__main__":
     # Load the dataset
     ds_path = "data/DS_audio_gs.pt"
     ds = torch.load(ds_path)
-    
-    a2i_model = torch.load('./model/model.pt', map_location='cuda')
+
+    a2i_model = Audio2Image()
     a2i_model.device = 'cuda'
+
+
+    checkpoint = torch.load("model/checkpoint_last_epoch_99_loss5.29092_2024_11_29.pt")
+    a2i_model.model.load_state_dict(checkpoint)
+    
     print(a2i_model.device)
     # Generate an image from the dataset
     audio_data = ds.audio_data.to('cuda')
@@ -37,9 +42,11 @@ if __name__ == "__main__":
     
     tensor_to_gs_image(img_data[0].cpu()).show()
     
-    image = a2i_model.generate_image(audio_data[0].unsqueeze(0), process_bar=True, sampling=True)
+    print(dir(a2i_model))
+    image = a2i_model.model.generate_image(audio_data[0].unsqueeze(0), process_bar=True, sampling=True)
     
     # display the image
     print(image.shape)
     img_png = tensor_to_gs_image(image.cpu())
     img_png.show()
+    img_png.save("output.png")
