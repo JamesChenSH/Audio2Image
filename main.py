@@ -4,6 +4,7 @@ from torch.utils.data import Subset
 from torch.autograd import Variable
 import numpy as np
 
+from argparse import ArgumentParser
 from tqdm import tqdm
 from skimage.metrics import structural_similarity as ssim
 
@@ -11,6 +12,9 @@ from typing import List
 
 from model.model_layers import Audio2ImageModel
 from data_processing.build_database import AudioImageDataset
+
+from pytorch_lightning import Trainer
+from pytorch_lightning.tuner.tuning import lr_find
 
 class  Audio2Image():
     '''
@@ -135,7 +139,7 @@ class  Audio2Image():
         
         # HyperParameters
         self.label_smoothing = 0.1
-        self.learning_rate = 1
+        self.learning_rate = 1e-4
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9)
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: self.lr_scheduler(self.embedding_dim, step, warmup=30
                                                                                                                     ))
@@ -151,7 +155,6 @@ class  Audio2Image():
         self,
         training_dataloader:torch.utils.data.DataLoader,
         val_dataloader:torch.utils.data.DataLoader,
-        batch_size: int = 8,
         patience: int = 5
     ) -> None:
         '''
@@ -251,7 +254,56 @@ class  Audio2Image():
         print(f"Test Loss: {test_loss}, Device: {self.device}")             
 
 
+
+# ========= Helpers ========== #
+
+
+def learning_rate_finder(model, training_loader, min_lr, max_lr):
+    criterion = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=min_lr)
+    cur_lr = min_lr
+    num_iter = len(training_loader)
+    
+    lrs = []
+    losses = []
+    
+    for step, (inputs, targets) in enumerate(training_loader):
+        if step >= num_iter:
+            break
+        
+        lr = cur_lr * (max_lr / cur_lr) ** (step / num_iter)
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr
+            
+        lrs.append(lr)
+
+        output = model(inputs, targets[:, :-1])
+        loss = criterion(output.reshape(-1, output.shape[-1]), targets[:, 1:].contiguous().view(-1))
+        losses.append(loss.item())
+        
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    
+    import matplotlib.pyplot as plt
+    plt.plot(lrs, losses)
+    plt.xscale('log')
+    plt.xlabel('LR')
+    plt.ylabel('Loss')
+    plt.title("Learning Rate Finder")
+    plt.savefig('./learning_rates.png')
+
+
+
+
 if __name__ == "__main__":
+
+    # Argument Parsing
+    parser = ArgumentParser()
+    parser.add_argument("--find_lr", action="store_true")
+    
+    args = parser.parse_args()
+
 
     config = {
         'batch size': 32,
@@ -259,12 +311,14 @@ if __name__ == "__main__":
         'validation ratio': 0.1,
         'test ratio': 0.1,
         'device': 'cuda',
-        'epochs': 100
+        'epochs': 1000
     }
 
+    a2i_core = Audio2Image(device=config['device'], epochs=config['epochs'], patience=5)
+    
     # Load the dataset
-    ds_path = "data/DS_audio_gs.pt"
-    ds = torch.load(ds_path)
+    ds_path = "data/DS_airport.pt"
+    ds = torch.load(ds_path, weights_only=False)
     
     # Split Train, Val, Test
     train_size = int(config['train ratio']*len(ds))
@@ -276,7 +330,9 @@ if __name__ == "__main__":
     val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)    
     test_dataloader = torch.utils.data.DataLoader(test, batch_size=config['batch size'], shuffle=True)
     
-    a2i_core = Audio2Image(device=config['device'], epochs=config['epochs'], patience=5)
+    if args.find_lr:
+        # Find correct LR for model.
+        exit()
     
     # Chack size of model
     total_params = sum(p.numel() for p in a2i_core.model.parameters())
@@ -287,7 +343,7 @@ if __name__ == "__main__":
     # print(a2i_core.model.generate_image(audio_data[0].unsqueeze(0)))
     
     # Train
-    a2i_core.train(train_dataloader, val_dataloader, batch_size=config['batch size'])
+    a2i_core.train(train_dataloader, val_dataloader)
     
     # Save the model
     model_path = "model/model.pt"
