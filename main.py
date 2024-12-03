@@ -40,7 +40,7 @@ class  Audio2Image():
         
         epochs:int = 100,
         patience:int = 5,
-        lr:int = 1e-4
+        lr:float = 1e-4
     ):
         """
         This is the main model for the Audio 2 Image project. We only need to build this once
