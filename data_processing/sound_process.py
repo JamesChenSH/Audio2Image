@@ -54,7 +54,7 @@ def process_audio_files(root_dir, target_dir):
                 sample_rate, data = wav.read(file_path)
 
                 # split data into 10 pieces
-                PIECE_NUM = 50
+                PIECE_NUM = 250
                 segment_length = len(data) // PIECE_NUM
                 OVERLAP_RATE = 0.5
                 gap_between_two_segments = int((1 - OVERLAP_RATE) * segment_length)
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     
     sound_root_dir = os.path.join(dataset_folder, "sound")
     processed_dir = os.path.join(dataset_folder, "audio_processed")
-    # process_audio_files(sound_root_dir, processed_dir)
+    process_audio_files(sound_root_dir, processed_dir)
 
     # process_audio_files(sound_root_dir, processed_dir)
     joint_dir = os.path.join(dataset_folder, "audio_airport_tensor.pt")

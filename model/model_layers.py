@@ -342,7 +342,7 @@ class Audio2ImageModel(nn.Module):
         self.img_sos, self.img_eos, self.img_pad = img_special_token
         self.audio_sos, self.aud_eos, self.audio_pad = aud_special_tokens
         
-        self.aud_pe = positional_encoding_sinusoidal(embedding_dim, 50).to(self.device)
+        self.aud_pe = positional_encoding_sinusoidal(embedding_dim, 499).to(self.device)
         self.img_pe = positional_encoding_sinusoidal(embedding_dim, 32*32).to(self.device)
         
         self.audio_embedding = TransformerLinearEmbedding(audio_depth, embedding_dim)             # [batch_size, aud_len, embedding_dim]

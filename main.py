@@ -23,24 +23,24 @@ class  Audio2Image():
     model output: [img_pixel, 0-255]
     '''
     def __init__(self,
-        audio_depth:int = 2205, # [src_len, audio_depth]
+        audio_depth:int = 441, # [src_len, audio_depth]
         img_depth:int = 256, 
         device:str = 'cuda',                     # 'cuda' or 'cpu' or 'mps'
-        embedding_dim:int = 512,                # 1024 for optimal
+        embedding_dim:int = 256,                # 1024 for optimal
         encoder_head_num:int = 8,               
         decoder_head_num:int = 8, 
-        encoder_ff_dim:int = 4*512,             # 4*1024 for optimal
-        decoder_ff_dim:int = 4*512,             # 4*1024 for optimal
+        encoder_ff_dim:int = 4*256,             # 4*1024 for optimal
+        decoder_ff_dim:int = 4*256,             # 4*1024 for optimal
         encoder_dropout_rate:float = 0.1, 
         decoder_dropout_rate:float = 0.1,
         encoder_attn_dropout:float = 0.1,
         decoder_attn_dropout:float = 0.1, 
-        num_enc_layers:int = 6,                 # 12 for optimal
-        num_dec_layers:int = 6,                  # 12 for optimal  
+        num_enc_layers:int = 2,                 # 12 for optimal
+        num_dec_layers:int = 2,                  # 12 for optimal  
         
         epochs:int = 100,
         patience:int = 5,
-        lr:float = 1e-4
+        lr:float = 1e-3
     ):
         """
         This is the main model for the Audio 2 Image project. We only need to build this once
@@ -325,8 +325,8 @@ if __name__ == "__main__":
         'validation ratio': 0.1,
         'test ratio': 0.1,
         'device': 'cuda',
-        'epochs': 2000,
-        'lr': 0.001
+        'epochs': 100,
+        'lr': 0.1
     }
 
     a2i_core = Audio2Image(device=config['device'], epochs=config['epochs'], patience=5, lr=config['lr'])
