@@ -219,10 +219,10 @@ class  Audio2Image():
                     print(f"Waiting: {wait_count}")
                     if wait_count == patience:
                         print("Checkpoint Saved")
-                        torch.save(cached_param, f"{model_dir}/checkpoint_epoch_{epoch}_loss{round(val_loss, 5)}.pt")
+                        torch.save(cached_param, f"{model_dir}/checkpoint_epoch_{epoch}_loss_{str(round(val_loss, 4)).replace('.', '_')}.pt")
             
             print(f"== Validation Loss: {val_loss}, Device: {self.device}")
-        torch.save(cached_param, f"model/checkpoint_last_epoch_{epoch}_loss{round(val_loss, 5)}.pt")
+        torch.save(cached_param, f"{model_dir}/checkpoint_last_epoch_{epoch}_loss{round(val_loss, 5)}.pt")
         print(f"Training Complete")
             
 
@@ -325,7 +325,7 @@ if __name__ == "__main__":
         'validation ratio': 0.1,
         'test ratio': 0.1,
         'device': 'cuda',
-        'epochs': 2000,
+        'epochs': 200,
         'lr': 0.001
     }
 
@@ -361,7 +361,7 @@ if __name__ == "__main__":
     
     model_dir = f"model/model_dim_{a2i_core.embedding_dim}_layer_enc_{a2i_core.num_enc_layers}_dec_{a2i_core.num_dec_layers}"
     if not os.path.isdir(model_dir):
-        os.mkdir(model_dir)
+        os.mkdir(model_dir, mode=750)
     # Train
     a2i_core.train(train_dataloader, val_dataloader, model_dir)
     # Save the model
