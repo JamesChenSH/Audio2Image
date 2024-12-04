@@ -39,6 +39,8 @@ def process_audio_files(root_dir, target_dir):
         if dirpath == root_dir:
             continue
 
+
+
         current_folder = os.path.basename(dirpath)
         curr_target_dir = os.path.join(target_dir, current_folder)
 
@@ -54,12 +56,16 @@ def process_audio_files(root_dir, target_dir):
                 # split data into 10 pieces
                 PIECE_NUM = 50
                 segment_length = len(data) // PIECE_NUM
+                OVERLAP_RATE = 0.5
+                gap_between_two_segments = int((1 - OVERLAP_RATE) * segment_length)
                 fft_data_segments = []
 
-                for i in range(PIECE_NUM):
-                    start = i * segment_length
-                    end = start + segment_length
-                    data_segment = data[start:end]
+                idx = 0
+                while idx <= len(data) - segment_length:
+                    start = idx
+                    end = idx + segment_length
+                    data_segment = data[start: end]
+                    idx += gap_between_two_segments
 
                     # Perform FFT on the audio data
                     fft_data, fft_freq = perform_fft(data_segment, sample_rate)
@@ -122,7 +128,9 @@ if __name__ == "__main__":
     
     sound_root_dir = os.path.join(dataset_folder, "sound")
     processed_dir = os.path.join(dataset_folder, "audio_processed")
+    # process_audio_files(sound_root_dir, processed_dir)
 
     # process_audio_files(sound_root_dir, processed_dir)
     joint_dir = os.path.join(dataset_folder, "audio_airport_tensor.pt")
+    # joint_dir = os.path.join(dataset_folder, "audio_tensor.pt")
     build_joint_sound_tensor(processed_dir, joint_dir)
