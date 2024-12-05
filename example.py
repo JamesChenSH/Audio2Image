@@ -2,9 +2,15 @@ from main import Audio2Image
 from data_processing.build_database import AudioImageDataset
 import torchvision.transforms as transforms
 
-import torch
+import torch, random
 import numpy as np
 import PIL
+
+random.seed(42)
+np.random.seed(42)
+torch.manual_seed(42)
+torch.cuda.manual_seed_all(42)
+
 
 def tensor_to_gs_image(tensor):
     '''
@@ -33,7 +39,7 @@ if __name__ == "__main__":
 
 
     # checkpoint = torch.load("model/checkpoint_last_epoch_199_loss5.97459.pt")
-    checkpoint = torch.load("model/checkpoint_epoch_51_loss4.08289.pt", weights_only=False)
+    checkpoint = torch.load("model/model_dim_512_layer_enc_6_dec_6/model_bs_32_lr_0.1.pt", weights_only=False)
     
     a2i_model.model.load_state_dict(checkpoint)
     
