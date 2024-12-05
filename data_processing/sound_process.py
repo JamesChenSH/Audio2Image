@@ -56,7 +56,7 @@ def process_audio_files(root_dir, target_dir):
                 # split data into 10 pieces
                 PIECE_NUM = 250
                 segment_length = len(data) // PIECE_NUM
-                OVERLAP_RATE = 0.5
+                OVERLAP_RATE = 0.7
                 gap_between_two_segments = int((1 - OVERLAP_RATE) * segment_length)
                 fft_data_segments = []
 
