@@ -32,8 +32,6 @@ def build_joint_sound_embed_tensor(processed_dir, joint_dir):
             except RuntimeError as e:
                 print(f"Error stacking tensors: {e}")
             
-            if count == 5: 
-                break
             
     joint_tensor_list = torch.stack(tensor_list)  # Adds a new dimension
     print(joint_tensor_list.shape)
