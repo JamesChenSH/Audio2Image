@@ -17,13 +17,25 @@ def tensor_to_gs_image(tensor):
     Takes in tensor with value from 0-255
     returns an image
     '''
-    tensor = tensor
     tensor = np.array(tensor, dtype=np.uint8)
     if np.ndim(tensor)>3:
         assert tensor.shape[0] == 1
         tensor = tensor[0]
     tensor = np.reshape(tensor, (32, 32))
     print(tensor.shape)
+    return PIL.Image.fromarray(tensor)
+
+
+
+def tensor_to_rgb_image(tensor):
+    '''
+    Takes in tensor
+    returns an image
+    '''
+    tensor = np.array(tensor, dtype=np.uint8)
+    # Squeeze tensor to 3 dimensions
+    tensor.reshape(3, 32, 32)
+    tensor = np.moveaxis(tensor, 0, -1)
     return PIL.Image.fromarray(tensor)
 
 
