@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from data_processing.build_database import AudioImageDataset
 
 
 
@@ -14,6 +15,7 @@ def train(model, train_loader, test_loader, num_epochs, lr, device, model_name):
             img = img.to(device)
 
             optimizer.zero_grad()
+            print(img.shape, audio.shape)
             output = model(audio, img)
             loss = criterion(output, img)
             loss.backward()
@@ -42,6 +44,22 @@ def train(model, train_loader, test_loader, num_epochs, lr, device, model_name):
 
 
 
+class MyModel(nn.Module):
+    def __init__(self):
+        super(MyModel, self).__init__()
+
+        self.img_embedding = nn.Embedding(256, 512)
+        self.audio_embedding = nn.Linear(441, 512)
+
+        self.transformer = nn.Transformer(nhead=16, num_encoder_layers=12, num_decoder_layers=12, dim_feedforward=512, dropout=0.1, batch_first=True)
+
+    def forward(self, audio, img):
+        img = self.img_embedding(img)
+        audio = self.audio_embedding(audio)
+
+        output = self.transformer(audio, img)
+
+        return output
 
 
 
@@ -54,9 +72,8 @@ if __name__ == "__main__":
     train_loader = torch.utils.data.DataLoader(train_ds, batch_size=32, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_ds, batch_size=32, shuffle=True)
 
+    model = MyModel()
 
-    transformer = nn.Transformer(nhead=16, num_encoder_layers=12, num_decoder_layers=12, dim_feedforward=512, dropout=0.1)
+    model.to('cuda')
 
-    transformer.to('cuda')
-
-    train(transformer, train_loader, test_loader, num_epochs=200, lr=0.1, device='cuda', model_name="transformer_16_12_512_0.1")
+    train(model, train_loader, test_loader, num_epochs=200, lr=0.1, device='cuda', model_name="transformer_16_12_512_0.1")
