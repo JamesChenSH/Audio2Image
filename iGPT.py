@@ -1,3 +1,6 @@
+import os
+os.environ['HF_HOME'] = './cache/'
+
 from transformers import ImageGPTImageProcessor, ImageGPTForCausalImageModeling
 import torch
 import matplotlib.pyplot as plt
