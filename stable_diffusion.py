@@ -130,13 +130,15 @@ if __name__ == "__main__":
             timesteps = torch.randint(
                 0,
                 scheduler.num_train_timesteps,
-                (config['batch size'],),
+                (audio.shape[0],),
                 device=clean_images.device,
             ).long()
 
             # Add noise
             noise = torch.randn_like(posterior)
-            noisy_latents = posterior + noise
+            print(noise.shape)
+            # noisy_latents = posterior + noise
+            noisy_latents = scheduler.add_noise(posterior, noise, timesteps)
             # Predict noise with conditional UNet
             predicted_noise = conditional_unet(noisy_latents, timesteps, audio).sample
 
