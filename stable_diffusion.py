@@ -88,7 +88,7 @@ if __name__ == "__main__":
     }
 
     # Load the dataset
-    ds_path = "data/DS_airport_diffusion.pt"
+    ds_path = "data/DS_train_station_diffusion.pt"
     ds = torch.load(ds_path, weights_only=False)
     
     # Split Train, Val, Test

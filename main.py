@@ -145,7 +145,7 @@ class  Audio2Image():
         # HyperParameters
         self.label_smoothing = 0.1
         self.learning_rate = lr
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9, weight_decay=0.2)
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, 
                                 lr_lambda=lambda step: self.lr_scheduler(self.embedding_dim, step, warmup=300))
         self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing, reduction='mean')       
@@ -337,7 +337,7 @@ if __name__ == "__main__":
         'test ratio': 0.1,
         'device': 'cuda',
         'epochs': 300,
-        'lr': 1e-6,
+        'lr': 1e-1,
 
 
         # Model Scale related
@@ -369,7 +369,7 @@ if __name__ == "__main__":
 
     a2i_core.model.apply(initialize_weights)
     # Try to load previous model
-    a2i_core.model.load_state_dict(torch.load("./model/model_dim_512_layer_enc_6_dec_6/model_bs_32_lr_0.1.pt"))
+    # a2i_core.model.load_state_dict(torch.load("./model/model_dim_512_layer_enc_6_dec_6/model_bs_32_lr_0.1.pt"))
 
 
     
