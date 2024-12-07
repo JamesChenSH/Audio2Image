@@ -27,6 +27,19 @@ def tensor_to_gs_image(tensor: torch.Tensor):
 
 
 
+def tensor_to_rgb_image(tensor):
+    '''
+    Takes in tensor
+    returns an image
+    '''
+    tensor = np.array(tensor, dtype=np.uint8)
+    # Squeeze tensor to 3 dimensions
+    tensor.reshape(3, 32, 32)
+    tensor = np.moveaxis(tensor, 0, -1)
+    return PIL.Image.fromarray(tensor)
+
+
+
 if __name__ == "__main__":
     
     # Load the dataset
