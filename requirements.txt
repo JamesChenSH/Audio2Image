@@ -6,3 +6,9 @@ scikit-image
 torch
 torchvision
 tqdm
+diffusers
+torchsummary
+soundfile
+datasets
+transformers
+accelerate

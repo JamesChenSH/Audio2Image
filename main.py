@@ -151,7 +151,7 @@ class  Audio2Image():
         # HyperParameters
         self.label_smoothing = 0.1
         self.learning_rate = lr
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9, weight_decay=0.2)
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, 
                                 lr_lambda=lambda step: self.lr_scheduler(self.embedding_dim, step, warmup=warmup))
         self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing, reduction='mean')       
