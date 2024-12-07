@@ -1,16 +1,15 @@
-import torch, os, random
+import torch, os, random, json
 import torch.utils.data
 import torch.nn as nn
 import torch.nn.init as init
 from torch.utils.data import Subset
-from torch.autograd import Variable
 import numpy as np
 
 from argparse import ArgumentParser
 from tqdm import tqdm
 from skimage.metrics import structural_similarity as ssim
 
-from typing import List
+from datetime import datetime
 
 from model.model_layers import Audio2ImageModel
 from data_processing.build_database import AudioImageDataset
@@ -29,23 +28,26 @@ class  Audio2Image():
     '''
     def __init__(self,
         audio_depth:int = 441, # [src_len, audio_depth]
-        img_depth:int = 512, 
+        audio_len:int = 499,
+        img_depth:int = 256,
+        img_len:int = 32*32, 
         device:str = 'cuda',                     # 'cuda' or 'cpu' or 'mps'
         embedding_dim:int = 512,                # 1024 for optimal
         encoder_head_num:int = 8,               
         decoder_head_num:int = 8, 
         encoder_ff_dim:int = 4*512,             # 4*1024 for optimal
         decoder_ff_dim:int = 4*512,             # 4*1024 for optimal
-        encoder_dropout_rate:float = 0.1, 
-        decoder_dropout_rate:float = 0.1,
-        encoder_attn_dropout:float = 0.1,
-        decoder_attn_dropout:float = 0.1, 
+        encoder_dropout_rate:float = 0.3, 
+        decoder_dropout_rate:float = 0.3,
+        encoder_attn_dropout:float = 0.3,
+        decoder_attn_dropout:float = 0.3, 
         num_enc_layers:int = 6,                 # 12 for optimal
         num_dec_layers:int = 6,                  # 12 for optimal  
         
         epochs:int = 100,
         patience:int = 5,
-        lr:float = 1e-3
+        lr:float = 1e-3,
+        warmup:int = 300
     ):
         """
         This is the main model for the Audio 2 Image project. We only need to build this once
@@ -85,7 +87,9 @@ class  Audio2Image():
             Number of decoder layers
         """
         self.audio_depth = audio_depth
+        self.audio_len = audio_len
         self.img_depth = img_depth
+        self.img_len = img_len
         self.embedding_dim = embedding_dim
         self.encoder_head_num = encoder_head_num
         self.decoder_head_num = decoder_head_num
@@ -120,7 +124,9 @@ class  Audio2Image():
     
         self.model = Audio2ImageModel(
             self.audio_depth, 
+            self.audio_len,
             self.img_depth,
+            self.img_len,
             self.embedding_dim, 
             self.encoder_head_num, 
             self.decoder_head_num, 
@@ -147,7 +153,7 @@ class  Audio2Image():
         self.learning_rate = lr
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.98), eps=1e-9)
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, 
-                                lr_lambda=lambda step: self.lr_scheduler(self.embedding_dim, step, warmup=300))
+                                lr_lambda=lambda step: self.lr_scheduler(self.embedding_dim, step, warmup=warmup))
         self.criterion = torch.nn.CrossEntropyLoss(label_smoothing=self.label_smoothing, reduction='mean')       
         self.validation_criterion = ssim
         
@@ -160,8 +166,7 @@ class  Audio2Image():
         self,
         training_dataloader:torch.utils.data.DataLoader,
         val_dataloader:torch.utils.data.DataLoader,
-        model_dir:str,
-        patience: int = 5
+        model_dir:str
     ) -> None:
         '''
         Parameters:
@@ -222,18 +227,20 @@ class  Audio2Image():
                 else:
                     wait_count += 1
                     print(f"Waiting: {wait_count}")
-                    if wait_count == patience:
+                    if wait_count == self.patience:
                         print("Checkpoint Saved")
                         torch.save(cached_param, f"{model_dir}/checkpoint_epoch_{epoch}_loss_{str(round(lowest_val_loss, 4)).replace('.', '_')}.pt")
             
             print(f"== Validation Loss: {val_loss}, Device: {self.device}")
         torch.save(cached_param, f"{model_dir}/checkpoint_last_epoch_{epoch}_loss{round(val_loss, 5)}.pt")
         print(f"Training Complete")
+        return total_loss / len(train_dataloader), val_loss
             
 
     def test(
         self,
-        testing_dataloader:torch.utils.data.DataLoader
+        testing_dataloader:torch.utils.data.DataLoader,
+        img_len
     ):
         
         print(f"== Testing Model ==")
@@ -249,13 +256,12 @@ class  Audio2Image():
                 audio = audio.to(self.device)
                 img = img.to(self.device)
                 img = img.int()
-            
-                gen_img = self.model.generate_image(audio, sampling=True)
+                gen_img = self.model.generate_image(audio, sampling=True, img_len=img_len)
 
                 gen_img_np = gen_img.detach().cpu().numpy().astype(np.float32)
                 img_np = img.detach().cpu().numpy().astype(np.float32) 
 
-                loss = self.validation_criterion(gen_img_np, img_np, data_range=259.0)
+                loss = self.validation_criterion(gen_img_np, img_np, data_range=256.0)
                 test_loss += loss/test_dataloader.batch_size
         
         print(f"Test Loss: {test_loss}, Device: {self.device}")             
@@ -331,29 +337,45 @@ if __name__ == "__main__":
 
 
     config = {
-        'batch size': 32,
+        'batch size': 8,
         'train ratio': 0.8,
         'validation ratio': 0.1,
         'test ratio': 0.1,
         'device': 'cuda',
         'epochs': 300,
-        'lr': 1e-6,
+        'lr': 0.003,
+        'warm_up': 300,
+        'patience': 10,
 
 
         # Model Scale related
+        'aud_dim': 441,         # 441 | 221
+        'aud_len': 499,         # 499 | 500
+        'img_dim': 256,         
+        'img_len': 32*32*3,       # 32*32*3 for RGB
+
         'embedding_dim': 512,
-        'encoder_head_num': 8,
+        'encoder_head_num': 4,
         'decoder_head_num': 8,
 
         'encoder_ff_dim': 4*512,
         'decoder_ff_dim': 4*512,
 
-        'num_encoder_layers': 6,
-        'num_decoder_layers': 6
+        'num_encoder_layers': 0,
+        'num_decoder_layers': 24,
+
+        'dropout_ff_enc': 0.3,
+        'dropout_ff_dec': 0.3,
+        'dropout_attn_enc': 0.3,
+        'dropout_attn_dec': 0.3
 
     }
 
     a2i_core = Audio2Image(
+        audio_depth=config['aud_dim'],
+        audio_len=config['aud_len'],
+        img_depth=config['img_dim'],
+        img_len=config['img_len'],
         embedding_dim=config['embedding_dim'],
         encoder_head_num=config['encoder_head_num'],
         decoder_head_num=config['decoder_head_num'],
@@ -361,20 +383,29 @@ if __name__ == "__main__":
         decoder_ff_dim=config['decoder_ff_dim'],
         num_enc_layers=config['num_encoder_layers'],
         num_dec_layers=config['num_decoder_layers'],
+        
+        encoder_dropout_rate=config['dropout_attn_enc'],
+        decoder_dropout_rate=config['dropout_attn_dec'],
+        encoder_attn_dropout=config['dropout_attn_enc'],
+        decoder_attn_dropout=config['dropout_attn_dec'],
+
         device=config['device'], 
         epochs=config['epochs'], 
-        patience=5, 
-        lr=config['lr']
+        lr=config['lr'],
+        warmup=config['warm_up'],
+        patience=config['patience']
     )
 
     a2i_core.model.apply(initialize_weights)
     # Try to load previous model
-    a2i_core.model.load_state_dict(torch.load("./model/model_dim_512_layer_enc_6_dec_6/model_bs_32_lr_0.1.pt"))
+    # a2i_core.model.load_state_dict(torch.load("./model/model_dim_512_layer_enc_6_dec_6/model_bs_32_lr_0.1.pt"))
 
+    # Chack size of model
+    total_params = sum(p.numel() for p in a2i_core.model.parameters())
+    print(f"Number of parameters: {total_params}")
 
-    
     # Load the dataset
-    ds_path = "data/DS_airport.pt"
+    ds_path = "data/DS_airport_499.pt"
     ds = torch.load(ds_path, weights_only=False)
     
     # Split Train, Val, Test
@@ -393,23 +424,28 @@ if __name__ == "__main__":
         learning_rate_finder(a2i_core.model, train_dataloader, 1e-5, 1)
         exit()
     
-    # Chack size of model
-    total_params = sum(p.numel() for p in a2i_core.model.parameters())
-    print(f"Number of parameters: {total_params}")
-    
     # # Test code
     # audio_data = ds.audio_data.to(a2i_core.device)
     # print(a2i_core.model.generate_image(audio_data[0].unsqueeze(0)))
     
-    model_dir = f"model/model_dim_{a2i_core.embedding_dim}_layer_enc_{a2i_core.num_enc_layers}_dec_{a2i_core.num_dec_layers}"
+    run_time = datetime.now()
+    model_dir = f"./model/run_{run_time.year}_{run_time.month}_{run_time.day}_{run_time.hour}_{run_time.minute}_{run_time.second}"
+    model_json = f"{model_dir}/model_dim_{a2i_core.embedding_dim}_layer_enc_{a2i_core.num_enc_layers}_dec_{a2i_core.num_dec_layers}.json"
+
+    # Create save directory
     if not os.path.isdir(model_dir):
-        os.mkdir(model_dir, mode=750)
-    # Train
-    a2i_core.train(train_dataloader, val_dataloader, model_dir)
+        os.mkdir(model_dir, 0o750)
+
+    # Dump model structure as json
+    with open(model_json, 'w') as js:
+        json.dump(config, js)
+
+    # Train 
+    train_loss_final, val_loss_final = a2i_core.train(train_dataloader, val_dataloader, model_dir)
     # Save the model
-    model_path = f"{model_dir}/model_bs_{config['batch size']}_lr_{config['lr']}_epoch_{config['epochs']}.pt"
+    model_path = f"{model_dir}/model_bs_{config['batch size']}_lr_{config['lr']}_epoch_{config['epochs']}_trn_loss_{str(round(train_loss_final, 2)).replace('.', '_')}_val_loss{str(round(val_loss_final, 2)).replace('.','_')}.pt"
     torch.save(a2i_core.model.state_dict(), model_path)
     
     # Test
-    a2i_core.test(test_dataloader)
+    a2i_core.test(test_dataloader, config['img_len'])
 
