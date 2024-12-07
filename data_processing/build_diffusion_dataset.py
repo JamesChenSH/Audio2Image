@@ -12,7 +12,7 @@ from datasets import load_dataset
     
 
 class AudioImageDataset_Diffusion(Dataset):
-    def __init__(self, audio_path, img_folder):
+    def __init__(self, audio_path, img_folder, subset_path=None):
 
         # Load the audio tensors. No need for other operation
         self.audio_data = torch.load(audio_path)
@@ -30,7 +30,7 @@ class AudioImageDataset_Diffusion(Dataset):
         subfolders.sort()  # Sorting subfolders in lexicographical order
 
         for subfolder in subfolders:
-            if (subfolder != "data/image_original\\airport"):
+            if (subset_path is not None) and (subfolder != subset_path):
                 print("skipping")
                 continue
             files = [f.path for f in os.scandir(subfolder) if f.is_file()]
@@ -69,14 +69,15 @@ def build_dataloader_Diffusion(dataset_path, batch_size=32):
     return data_loader
 
 
-def build_dataset(base_path, audio_set_path='audio_tensor.pt', img_dir='./data/image_original', output_path='Dataset_image_audio.pt'):
+def build_dataset(base_path, audio_set_path='audio_tensor.pt', img_dir='./data/image_original', output_path='Dataset_image_audio.pt', subset=None):
     # Create an instance of the custom dataset
     
     joint_audio_path = os.path.join(base_path, audio_set_path)
     output_path = os.path.join(base_path, output_path)
     
+    subset_path = f"data/image_original\\{subset}" if subset is not None else None
 
-    dataset = AudioImageDataset_Diffusion(joint_audio_path, img_dir)
+    dataset = AudioImageDataset_Diffusion(joint_audio_path, img_dir, subset_path)
 
     # Save the dataset directly
     torch.save(dataset, output_path)
@@ -89,8 +90,6 @@ if __name__ == "__main__":
 
     data_path_base = os.path.join("data")
     
-    name_audio_ds = "audio_airport_tensor_embed.pt"
+    name_audio_ds = "audio_train_station_tensor_embed.pt"
     
-    name_img_ds = "image_airport_tensor.pt"
-    
-    build_dataset(data_path_base, name_audio_ds, 'data/image_original', "DS_airport_diffusion.pt")
+    build_dataset(data_path_base, name_audio_ds, 'data/image_original', "DS_train_station_diffusion.pt", subset='train_station')
