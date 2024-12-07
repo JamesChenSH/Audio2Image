@@ -28,8 +28,12 @@ class AudioConditionalUNet(nn.Module):
         self.audio_conditioning = nn.Linear(audio_embedding_dim, embedding_dim, dtype=torch.float16)
 
     def forward(self, latent_image, timestep, audio_input):
+        # print(f"latent_image shape: {latent_image.shape}") 
+        # print(f"timestep shape: {timestep.shape}")         
+        # print(f"audio_input shape: {audio_input.shape}") 
         # Generate audio conditioning
         audio_embed = self.audio_conditioning(audio_input)
+        # print(f"audio_embed shape: {audio_embed.shape}")
         # Pass to UNet
         return self.unet(latent_image, timestep, audio_embed)
 
@@ -43,8 +47,14 @@ def generate_image_from_audio(audio_embedding, conditional_unet, vae, num_steps=
 
 
     # Initialize random latent vector
-    latent_dim = 768
-    image_latents = torch.randn(1, latent_dim, 256, 256).cuda()
+    # latent_dim = 768
+    # image_latents = torch.randn(1, latent_dim, 256, 256).to("cuda")
+    ################## Fix suggested by GPT #######################
+    latent_dim = 4  # Match UNet in_channels
+    image_latents = torch.randn(768, 4, 64, 64).to("cuda", dtype=torch.float16)
+    ###############################################################
+    audio_embedding = audio_embedding.half().to("cuda")
+    image_latents = image_latents.half().to("cuda")
 
     # Iterative denoising
     for t in reversed(range(num_steps)):
@@ -59,7 +69,6 @@ def generate_image_from_audio(audio_embedding, conditional_unet, vae, num_steps=
     plt.imshow(generated_image.squeeze().permute(1, 2, 0).cpu().numpy())
     plt.axis('off')
     plt.show()
-
 
 
 if __name__ == "__main__":
@@ -77,7 +86,8 @@ if __name__ == "__main__":
     print("Model loaded")
 
     config = {
-        'batch size': 32,
+        ########### batch size restricted to be 16 in forward pass??? #################
+        'batch size': 16,
         'train ratio': 0.8,
         'validation ratio': 0.1,
         'device': 'cuda',
