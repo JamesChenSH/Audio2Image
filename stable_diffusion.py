@@ -86,16 +86,16 @@ def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, va
     # Decode the final latent vector
     with torch.no_grad(), autocast("cuda",):
         latents = 1 / 0.18215 * image_latents
-        image = vae.decode(latents).sample
-        image = (image / 2 + 0.5).clamp(0, 1)
+        images = vae.decode(latents).sample
+        images = (images / 2 + 0.5).clamp(0, 1)
 
-        image = image.cpu().permute(0, 2, 3, 1).float().numpy()
+        images = images.cpu().permute(0, 2, 3, 1).float().numpy()
 
     images = (images * 255).round().astype("uint8")
     # Save the image 
     for i, image in enumerate(images):
         pil_images = Image.fromarray(image)
-        pil_images.save(f'sample_image_{i}')
+        pil_images.save(f'sample_image_{i}.jpg')
 
 
 if __name__ == "__main__":
