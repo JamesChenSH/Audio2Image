@@ -20,7 +20,7 @@ class AudioImageDataset_Diffusion(Dataset):
         # Prepare image
         self.img_data = []
         self.transform = transforms.Compose([
-            transforms.Resize((512, 512)),
+            transforms.Resize((256, 256)),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize([0.5], [0.5]),
@@ -92,4 +92,4 @@ if __name__ == "__main__":
     
     name_audio_ds = "audio_train_station_tensor_embed.pt"
     
-    build_dataset(data_path_base, name_audio_ds, 'data/image_original', "DS_train_station_diffusion_large.pt", subset='train_station')
+    build_dataset(data_path_base, name_audio_ds, 'data/image_original', "DS_diffusion.pt")

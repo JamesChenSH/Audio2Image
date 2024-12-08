@@ -49,8 +49,16 @@ class AudioConditionalUNet(nn.Module):
         # print(f"audio_input shape: {audio_input.shape}") 
         # Generate audio conditioning
         audio_input = (audio_input - audio_input.mean()) / (audio_input.std() + 1e-8)
-
         audio_embed = self.audio_conditioning(audio_input)
+
+        # Placeholder for audio embedding, used for testing unconditional diffusion
+
+        # Debug use: Try text prompt
+        # prompt = "Beautiful picture of a wave breaking"  # @param
+        # negative_prompt = "zoomed in, blurry, oversaturated, warped"  # @param
+        # # Encode the prompt
+        # text_embeddings = pipe._encode_prompt(prompt, 'cuda', 1, True, negative_prompt)
+
         # print(f"audio_embed shape: {audio_embed.shape}")
         # Pass to UNet
         return self.unet(latent_image, timestep, encoder_hidden_states=audio_embed)
@@ -59,6 +67,58 @@ class AudioConditionalUNet(nn.Module):
 '''
 ============================ Inference Function =============================
 '''
+def generate_image_from_text(pipe):
+    '''
+    This is a standard inference method for generating images from text prompts.
+    Directly taken from the official documentation.
+
+    Link: https://huggingface.co/learn/diffusion-course/en/unit3/2
+    '''
+
+    device = "cuda"
+    guidance_scale = 8  # @param
+    num_inference_steps = 30  # @param
+    prompt = "Beautiful picture of a wave breaking"  # @param
+    negative_prompt = "zoomed in, blurry, oversaturated, warped"  # @param
+
+    # Encode the prompt
+    text_embeddings = pipe._encode_prompt(prompt, device, 1, True, negative_prompt)
+    print(text_embeddings.shape)
+    # Create our random starting point
+    latents = torch.randn((1, 4, 32, 32), device=device)
+    latents *= pipe.scheduler.init_noise_sigma
+
+    # Prepare the scheduler
+    pipe.scheduler.set_timesteps(num_inference_steps, device=device)
+
+    # Loop through the sampling timesteps
+    for i, t in enumerate(pipe.scheduler.timesteps):
+
+        # Expand the latents if we are doing classifier free guidance
+        latent_model_input = torch.cat([latents] * 2)
+        print(latent_model_input.shape)
+        # Apply any scaling required by the scheduler
+        latent_model_input = pipe.scheduler.scale_model_input(latent_model_input, t)
+
+        # Predict the noise residual with the UNet
+        with torch.no_grad():
+            noise_pred = pipe.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+
+        # Perform guidance
+        noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+        noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+        # Compute the previous noisy sample x_t -> x_t-1
+        latents = pipe.scheduler.step(noise_pred, t, latents).prev_sample
+
+    # Decode the resulting latents into an image
+    with torch.no_grad():
+        image = pipe.decode_latents(latents.detach())
+
+    # View
+    image = pipe.numpy_to_pil(image)[0]
+    image.show()
+
 
 # For inference
 def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, vae, scheduler, num_steps=50):
@@ -70,22 +130,31 @@ def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, va
     ################## Fix suggested by GPT #######################
     latent_dim = (1, 4, 32, 32)  # Match UNet in_channels
     image_latents = torch.randn(latent_dim).to("cuda")
+    image_latents *= pipe.scheduler.init_noise_sigma
     ###############################################################
     audio_embedding = audio_embedding.to("cuda")
-    placeholder_embed = torch.zeros(audio_embedding.shape).to('cuda')
 
     image_latents = image_latents.to("cuda")
-    # Iterative denoising
-    for t in tqdm(reversed(range(num_steps))):
-        with torch.no_grad(), autocast("cuda",):
-            image_latents_input = scheduler.scale_model_input(image_latents, t)
-            predicted_noise = conditional_unet(image_latents_input, timestep=torch.tensor([t,], dtype=torch.long).cuda(), audio_input=placeholder_embed).sample
 
-            image_latents = scheduler.step(predicted_noise, torch.tensor([t,], dtype=torch.long).cuda(), image_latents).prev_sample
+    scheduler.set_timesteps(num_steps, device="cuda")
+
+    # Iterative denoising
+    for i, t in tqdm(enumerate(scheduler.timesteps)):
+
+        image_latents_input = image_latents
+        image_latents_input = scheduler.scale_model_input(image_latents_input, t)
+        
+        with torch.no_grad(), autocast("cuda",):
+            noise_pred = conditional_unet(image_latents_input, timestep=t, audio_input=audio_embedding).sample
+            
+        # noise_pred_uncond, noise_pred_text = predicted_noise.chunk(2)
+        # noise_pred = noise_pred_uncond + 8 * (noise_pred_text - noise_pred_uncond)
+
+        image_latents = scheduler.step(noise_pred, t, image_latents).prev_sample
 
     # Decode the final latent vector
     with torch.no_grad(), autocast("cuda",):
-        latents = 1 / 0.18215 * image_latents
+        latents = 1 / 0.18215 * image_latents.detach()
         images = vae.decode(latents).sample
         images = (images / 2 + 0.5).clamp(0, 1)
 
@@ -172,7 +241,7 @@ if __name__ == "__main__":
 
     # Scaler for mixed precision
     scaler = torch.amp.GradScaler("cuda")
-
+    conditional_unet.train()
     # Training loop
     for epoch in range(config['epochs']):
         
