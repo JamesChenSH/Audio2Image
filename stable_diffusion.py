@@ -213,6 +213,10 @@ if __name__ == "__main__":
 
         print(f"Epoch {epoch+1}, Loss: {total_loss / len(train_dataloader)}")
 
+    # Save the model
+    torch.save(conditional_unet.state_dict(), "diffusion_models/conditional_unet.pth")
+    torch.save(vae.state_dict(), "diffusion_models/vae.pth")
+
     # Example usage - Load one audio embedding from dataset
 
     audio_embedding = val.dataset.audio_data[0]
