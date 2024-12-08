@@ -15,7 +15,7 @@ import numpy as np
 
 from torch.amp import autocast
 from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
-
+from PIL import Image
 
 random.seed(42)
 np.random.seed(42)
@@ -61,7 +61,7 @@ class AudioConditionalUNet(nn.Module):
 '''
 
 # For inference
-def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, vae, scheduler, num_steps=50):
+def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, vae, scheduler, num_steps=1000):
 
 
     # Initialize random latent vector
@@ -72,22 +72,30 @@ def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, va
     image_latents = torch.randn(latent_dim).to("cuda")
     ###############################################################
     audio_embedding = audio_embedding.to("cuda").unsqueeze(0)
+    placeholder_embed = torch.zeros(audio_embedding.shape).to('cuda')
+
     image_latents = image_latents.to("cuda")
     # Iterative denoising
-    for t in reversed(range(num_steps)):
+    for t in tqdm(reversed(range(num_steps))):
         with torch.no_grad(), autocast("cuda",):
-            predicted_noise = conditional_unet(image_latents, timestep=torch.tensor([t,], dtype=torch.long).cuda(), audio_input=audio_embedding).sample
-            predicted_noise = scheduler.scale_model_input(predicted_noise, t)
+            image_latents_input = scheduler.scale_model_input(image_latents, t)
+            predicted_noise = conditional_unet(image_latents_input, timestep=torch.tensor([t,], dtype=torch.long).cuda(), audio_input=placeholder_embed).sample
+
             image_latents = scheduler.step(predicted_noise, torch.tensor([t,], dtype=torch.long).cuda(), image_latents).prev_sample
 
     # Decode the final latent vector
     with torch.no_grad(), autocast("cuda",):
-        generated_image = vae.decode(image_latents).sample.clamp(0, 1)
+        latents = 1 / 0.18215 * image_latents
+        image = vae.decode(latents).sample
+        image = (image / 2 + 0.5).clamp(0, 1)
 
-    # Display the image
-    plt.imshow(generated_image.squeeze().permute(1, 2, 0).to(dtype=torch.float32).cpu().detach().numpy())
-    plt.axis('off')
-    plt.savefig('sample_image.png')
+        image = image.cpu().permute(0, 2, 3, 1).float().numpy()
+
+    images = (images * 255).round().astype("uint8")
+    # Save the image 
+    for i, image in enumerate(images):
+        pil_images = Image.fromarray(image)
+        pil_images.save(f'sample_image_{i}')
 
 
 if __name__ == "__main__":
@@ -139,6 +147,14 @@ if __name__ == "__main__":
     unet = pipe.unet
     conditional_unet = AudioConditionalUNet(unet, audio_embedding_dim, condition_embedding_dim).to(config['device'])
     vae = pipe.vae
+
+    '''
+    ========================= Test Model ==========================
+    '''
+    audio_embedding = val.dataset.audio_data[0]
+    print(scheduler.num_train_timesteps)
+    generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler)
+    exit()
     '''
     ========================= Model Training =========================
     '''
