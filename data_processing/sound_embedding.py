@@ -3,6 +3,8 @@ import soundfile as sf
 import os
 import torch
 
+from tqdm import tqdm
+
 
 def build_joint_sound_embed_tensor(processed_dir, joint_dir):
     count = 0
@@ -14,19 +16,19 @@ def build_joint_sound_embed_tensor(processed_dir, joint_dir):
 
     for subfolder in subfolders:
         print(f"Reading files from: {subfolder}")
-        if (subfolder != "data\\sound\\train_station"):
-            print("skipping")
-            continue
+        # if (subfolder != "data\\sound\\train_station"):
+        #     print("skipping")
+        #     continue
 
         # Get and sort all files in the current subfolder
         files = [f.path for f in os.scandir(subfolder) if f.is_file()]
         files.sort()  # Sorting files in lexicographical order
 
         # Loop through each file in the current subfolder
-        for file in files:
+        for file in tqdm(files):
             try:
                 audio, sr = sf.read(file)
-                emb, ts = torchopenl3.get_audio_embedding(audio, sr)
+                emb, ts = torchopenl3.get_audio_embedding(audio, sr, sampler='julian')
                 tensor_list.append(emb.squeeze(dim=0))
                 count += 1
             except RuntimeError as e:
@@ -46,7 +48,7 @@ if __name__ == "__main__":
     
     dataset_folder = os.path.join("data") 
     sound_root_dir = os.path.join(dataset_folder, "sound")
-    joint_dir = os.path.join(dataset_folder, "audio_train_station_tensor_embed.pt")
+    joint_dir = os.path.join(dataset_folder, "audio_tensor_embed.pt")
     build_joint_sound_embed_tensor(sound_root_dir, joint_dir)
 
     # audio, sr = sf.read('data\\sound\\airport\\00063_1.wav')
