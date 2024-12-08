@@ -48,10 +48,12 @@ class AudioConditionalUNet(nn.Module):
         # print(f"timestep shape: {timestep.shape}")         
         # print(f"audio_input shape: {audio_input.shape}") 
         # Generate audio conditioning
+        audio_input = (audio_input - audio_input.mean()) / (audio_input.std() + 1e-8)
+
         audio_embed = self.audio_conditioning(audio_input)
         # print(f"audio_embed shape: {audio_embed.shape}")
         # Pass to UNet
-        return self.unet(latent_image, timestep, audio_embed)
+        return self.unet(latent_image, timestep, encoder_hidden_states=audio_embed)
 
 
 '''
@@ -59,32 +61,33 @@ class AudioConditionalUNet(nn.Module):
 '''
 
 # For inference
-def generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler, num_steps=50):
+def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, vae, scheduler, num_steps=50):
 
 
     # Initialize random latent vector
     # latent_dim = 768
     # image_latents = torch.randn(1, latent_dim, 256, 256).to("cuda")
     ################## Fix suggested by GPT #######################
-    latent_dim = (768, 4, 64, 64)  # Match UNet in_channels
-    image_latents = torch.randn(latent_dim).to("cuda", dtype=torch.float16)
+    latent_dim = (1, 4, 32, 32)  # Match UNet in_channels
+    image_latents = torch.randn(latent_dim).to("cuda")
     ###############################################################
-    audio_embedding = audio_embedding.half().to("cuda")
-    image_latents = image_latents.half().to("cuda")
-
+    audio_embedding = audio_embedding.to("cuda").unsqueeze(0)
+    image_latents = image_latents.to("cuda")
     # Iterative denoising
     for t in reversed(range(num_steps)):
         with torch.no_grad(), autocast("cuda",):
-            predicted_noise = conditional_unet(image_latents, timestep=t, audio_input=audio_embedding)
-            image_latents = scheduler.step(predicted_noise, t, image_latents).prev_sample
+            predicted_noise = conditional_unet(image_latents, timestep=torch.tensor([t,], dtype=torch.long).cuda(), audio_input=audio_embedding).sample
+            predicted_noise = scheduler.scale_model_input(predicted_noise, t)
+            image_latents = scheduler.step(predicted_noise, torch.tensor([t,], dtype=torch.long).cuda(), image_latents).prev_sample
 
     # Decode the final latent vector
-    generated_image = vae.decode(image_latents).clamp(0, 1)
+    with torch.no_grad(), autocast("cuda",):
+        generated_image = vae.decode(image_latents).sample.clamp(0, 1)
 
     # Display the image
-    plt.imshow(generated_image.squeeze().permute(1, 2, 0).cpu().numpy())
+    plt.imshow(generated_image.squeeze().permute(1, 2, 0).to(dtype=torch.float32).cpu().detach().numpy())
     plt.axis('off')
-    plt.show()
+    plt.savefig('sample_image.png')
 
 
 if __name__ == "__main__":
@@ -92,7 +95,7 @@ if __name__ == "__main__":
 
     # Sample Code
     scheduler = EulerDiscreteScheduler.from_pretrained(model_id, subfolder="scheduler")
-    pipe = StableDiffusionPipeline.from_pretrained(model_id, scheduler=scheduler, torch_dtype=torch.float16)
+    pipe = StableDiffusionPipeline.from_pretrained(model_id, scheduler=scheduler)
     pipe = pipe.to("cuda")
 
     # prompt = "a photo of an astronaut riding a horse on mars"
@@ -107,8 +110,9 @@ if __name__ == "__main__":
         'train ratio': 0.9,
         'validation ratio': 0.1,
         'device': 'cuda',
-        'epochs': 10,
-        'lr': 1e-4,
+        'epochs': 3000,
+        'linear_lr': 1e-3,
+        'unet_lr': 1e-5,
 
         'condition_embedding_dim': 1024
     }
@@ -140,9 +144,18 @@ if __name__ == "__main__":
     '''
 
     # Optimizer and loss
-    optimizer = optim.AdamW(conditional_unet.audio_conditioning.parameters(), lr=config['lr'])
+    optimizer = optim.AdamW([
+        {"params": conditional_unet.audio_conditioning.parameters(), "lr": config['linear_lr']},
+        {"params": conditional_unet.unet.parameters(), "lr": config['unet_lr']}
+    ])
     criterion = nn.MSELoss()
-    torch.nn.utils.clip_grad_norm_(conditional_unet.audio_conditioning.parameters(), max_norm=1.0)
+
+    # Everything about gradient
+    vae.requires_grad_(False)
+    conditional_unet.requires_grad_(True)
+
+    # Scaler for mixed precision
+    scaler = torch.amp.GradScaler("cuda")
 
     # Training loop
     for epoch in range(config['epochs']):
@@ -151,12 +164,8 @@ if __name__ == "__main__":
 
         for audio, images in tqdm(train_dataloader):
             # Preprocess audio and images
-            audio = audio.to(config['device']).to(torch.float16)
+            audio = audio.to(config['device'])
             clean_images = images.to(config['device'])
-
-            latents = vae.encode(clean_images.half()).latent_dist
-            posterior = latents.mean
-
             timesteps = torch.randint(
                 0,
                 scheduler.num_train_timesteps,
@@ -164,27 +173,41 @@ if __name__ == "__main__":
                 device=clean_images.device,
             ).long()
 
-            # Add noise
-            noise = torch.randn_like(posterior)
-            # noisy_latents = posterior + noise
-            noisy_latents = scheduler.add_noise(posterior, noise, timesteps)
-
             with autocast("cuda",):
+                latents = vae.encode(clean_images).latent_dist
+                posterior = latents.sample() * 0.18215
+
+                # Add noise
+                noise = torch.randn_like(posterior)
+                # noisy_latents = posterior + noise
+                noisy_latents = scheduler.add_noise(posterior, noise, timesteps)
+
                 # Predict noise with conditional UNet
                 predicted_noise = conditional_unet(noisy_latents, timesteps, audio).sample
                 # Compute loss
                 loss = criterion(predicted_noise, noise)
 
             # Backpropagation and optimization
+            scaler.scale(loss).backward()
+            # for name, param in conditional_unet.named_parameters():
+            #     if param.requires_grad:
+            #         if param.grad is None:
+            #             print(f"Gradient for {name} is None")
+            #         else:
+            #             print(f"Gradient for {name}: Norm = {param.grad.norm()}")
+
+            torch.nn.utils.clip_grad_norm_(conditional_unet.parameters(), max_norm=1.0)
+            scaler.step(optimizer)
+            scaler.update()
+            
             optimizer.zero_grad()
-            loss.backward()
-            # for param in conditional_unet.audio_conditioning.parameters():
-            #     print(f"Before optimizer step: {param.data}")
+            # for name, param in conditional_unet.named_parameters():
+                # print(f"Parameter: {name}, Before optimizer step: {param.mean()}")
 
-            optimizer.step()
+            # optimizer.step()
 
-            # for param in conditional_unet.audio_conditioning.parameters():
-            #     print(f"After optimizer step: {param.data}")
+            # for name, param in conditional_unet.named_parameters():
+            #     print(f"Parameter: {name}, After optimizer step: {param.mean()}")
 
             total_loss += loss.item()
 
