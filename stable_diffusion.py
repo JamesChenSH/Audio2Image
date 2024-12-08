@@ -61,7 +61,7 @@ class AudioConditionalUNet(nn.Module):
 '''
 
 # For inference
-def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, vae, scheduler, num_steps=1000):
+def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, vae, scheduler, num_steps=50):
 
 
     # Initialize random latent vector
@@ -71,7 +71,7 @@ def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, va
     latent_dim = (1, 4, 32, 32)  # Match UNet in_channels
     image_latents = torch.randn(latent_dim).to("cuda")
     ###############################################################
-    audio_embedding = audio_embedding.to("cuda").unsqueeze(0)
+    audio_embedding = audio_embedding.to("cuda")
     placeholder_embed = torch.zeros(audio_embedding.shape).to('cuda')
 
     image_latents = image_latents.to("cuda")
@@ -118,7 +118,7 @@ if __name__ == "__main__":
         'train ratio': 0.9,
         'validation ratio': 0.1,
         'device': 'cuda',
-        'epochs': 3000,
+        'epochs': 5000,
         'linear_lr': 1e-3,
         'unet_lr': 1e-5,
 
@@ -151,10 +151,10 @@ if __name__ == "__main__":
     '''
     ========================= Test Model ==========================
     '''
-    audio_embedding = val.dataset.audio_data[0]
-    print(scheduler.num_train_timesteps)
-    generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler)
-    exit()
+    # audio_embedding = val.dataset.audio_data[0]
+    # print(scheduler.num_train_timesteps)
+    # generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler)
+    # exit()
     '''
     ========================= Model Training =========================
     '''
@@ -235,5 +235,5 @@ if __name__ == "__main__":
 
     # Example usage - Load one audio embedding from dataset
 
-    audio_embedding = val.dataset.audio_data[0]
+    audio_embedding = val.dataset.audio_data[0].unsqueeze(0)
     generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler)
