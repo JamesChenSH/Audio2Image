@@ -7,12 +7,13 @@ from tqdm import tqdm
 
 import torch
 import torch.nn as nn
+import torch.nn.init as init
 import torch.optim as optim
 import torchsummary
-
 import soundfile as sf
 import numpy as np
 
+from torch.amp import autocast
 from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
 
 '''
@@ -20,12 +21,21 @@ from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
 I am currently stopping here since Open L3 does not have pytorch support
 from its original team. Looking for solutions rn.
 '''
+def initialize_weights(m):
+    if isinstance(m, nn.Linear):
+        init.xavier_uniform_(m.weight)
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
+
 
 class AudioConditionalUNet(nn.Module):
     def __init__(self, unet, audio_embedding_dim, embedding_dim):
         super(AudioConditionalUNet, self).__init__()
+        self.audio_conditioning = nn.Linear(audio_embedding_dim, embedding_dim)
+        init.xavier_uniform_(self.audio_conditioning.weight)
+        if self.audio_conditioning.bias is not None:
+            nn.init.zeros_(self.audio_conditioning.bias)
         self.unet = unet
-        self.audio_conditioning = nn.Linear(audio_embedding_dim, embedding_dim, dtype=torch.float16)
 
     def forward(self, latent_image, timestep, audio_input):
         # print(f"latent_image shape: {latent_image.shape}") 
@@ -43,15 +53,15 @@ class AudioConditionalUNet(nn.Module):
 '''
 
 # For inference
-def generate_image_from_audio(audio_embedding, conditional_unet, vae, num_steps=50):
+def generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler, num_steps=50):
 
 
     # Initialize random latent vector
     # latent_dim = 768
     # image_latents = torch.randn(1, latent_dim, 256, 256).to("cuda")
     ################## Fix suggested by GPT #######################
-    latent_dim = 4  # Match UNet in_channels
-    image_latents = torch.randn(768, 4, 64, 64).to("cuda", dtype=torch.float16)
+    latent_dim = (768, 4, 64, 64)  # Match UNet in_channels
+    image_latents = torch.randn(latent_dim).to("cuda", dtype=torch.float16)
     ###############################################################
     audio_embedding = audio_embedding.half().to("cuda")
     image_latents = image_latents.half().to("cuda")
@@ -59,8 +69,7 @@ def generate_image_from_audio(audio_embedding, conditional_unet, vae, num_steps=
     # Iterative denoising
     for t in reversed(range(num_steps)):
         predicted_noise = conditional_unet(image_latents, timestep=t, audio_input=audio_embedding)
-        noise_scale = calculate_noise_scale(t)  # Define noise schedule based on diffusion
-        image_latents = image_latents - noise_scale * predicted_noise
+        image_latents = scheduler.step(predicted_noise, t, image_latents).prev_sample
 
     # Decode the final latent vector
     generated_image = vae.decode(image_latents).clamp(0, 1)
@@ -91,14 +100,14 @@ if __name__ == "__main__":
         'train ratio': 0.8,
         'validation ratio': 0.1,
         'device': 'cuda',
-        'epochs': 5,
+        'epochs': 1,
         'lr': 1e-6,
 
         'condition_embedding_dim': 1024
     }
 
     # Load the dataset
-    ds_path = "data/DS_train_station_diffusion.pt"
+    ds_path = "data/DS_airport_diffusion.pt"
     ds = torch.load(ds_path, weights_only=False)
     
     # Split Train, Val, Test
@@ -124,8 +133,9 @@ if __name__ == "__main__":
     '''
 
     # Optimizer and loss
-    optimizer = optim.AdamW(conditional_unet.parameters(), lr=config['lr'])
+    optimizer = optim.AdamW(conditional_unet.audio_conditioning.parameters(), lr=config['lr'])
     criterion = nn.MSELoss()
+    torch.nn.utils.clip_grad_norm_(conditional_unet.audio_conditioning.parameters(), max_norm=1.0)
 
     # Training loop
     for epoch in range(config['epochs']):
@@ -146,23 +156,31 @@ if __name__ == "__main__":
 
             # Add noise
             noise = torch.randn_like(posterior)
-            print(noise.shape)
             # noisy_latents = posterior + noise
             noisy_latents = scheduler.add_noise(posterior, noise, timesteps)
-            # Predict noise with conditional UNet
-            predicted_noise = conditional_unet(noisy_latents, timesteps, audio).sample
 
-            # Compute loss
-            loss = criterion(predicted_noise, noise)
+            with autocast("cuda",):
+                # Predict noise with conditional UNet
+                predicted_noise = conditional_unet(noisy_latents, timesteps, audio).sample
+                # Compute loss
+                loss = criterion(predicted_noise, noise)
 
             # Backpropagation and optimization
             optimizer.zero_grad()
             loss.backward()
+            for param in conditional_unet.audio_conditioning.parameters():
+                print(f"Before optimizer step: {param.data}")
+
             optimizer.step()
 
-        print(f"Epoch {epoch+1}, Loss: {loss.item()}")
+            for param in conditional_unet.audio_conditioning.parameters():
+                print(f"After optimizer step: {param.data}")
+
+            print(f"Epoch {epoch+1}, Loss: {loss.item()}")
+            if epoch == 1:
+                exit()
 
     # Example usage - Load one audio embedding from dataset
 
     audio_embedding = val.dataset.audio_data[0]
-    generate_image_from_audio(audio_embedding, conditional_unet, vae)
+    # generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler)
