@@ -5,7 +5,7 @@ from diffusers import StableDiffusionPipeline, EulerDiscreteScheduler, DDIMSched
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-import torch
+import torch, random
 import torch.nn as nn
 import torch.nn.init as init
 import torch.optim as optim
@@ -15,6 +15,12 @@ import numpy as np
 
 from torch.amp import autocast
 from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
+
+
+random.seed(42)
+np.random.seed(42)
+torch.manual_seed(42)
+torch.cuda.manual_seed_all(42)
 
 '''
 =======================  !!!NOTE!!! ==============================
@@ -68,8 +74,9 @@ def generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler,
 
     # Iterative denoising
     for t in reversed(range(num_steps)):
-        predicted_noise = conditional_unet(image_latents, timestep=t, audio_input=audio_embedding)
-        image_latents = scheduler.step(predicted_noise, t, image_latents).prev_sample
+        with torch.no_grad(), autocast("cuda",):
+            predicted_noise = conditional_unet(image_latents, timestep=t, audio_input=audio_embedding)
+            image_latents = scheduler.step(predicted_noise, t, image_latents).prev_sample
 
     # Decode the final latent vector
     generated_image = vae.decode(image_latents).clamp(0, 1)
@@ -96,12 +103,12 @@ if __name__ == "__main__":
 
     config = {
         ########### batch size restricted to be 16 in forward pass??? #################
-        'batch size': 16,
-        'train ratio': 0.8,
+        'batch size': 32,
+        'train ratio': 0.9,
         'validation ratio': 0.1,
         'device': 'cuda',
-        'epochs': 1,
-        'lr': 1e-6,
+        'epochs': 10,
+        'lr': 1e-4,
 
         'condition_embedding_dim': 1024
     }
@@ -139,6 +146,9 @@ if __name__ == "__main__":
 
     # Training loop
     for epoch in range(config['epochs']):
+        
+        total_loss = 0
+
         for audio, images in tqdm(train_dataloader):
             # Preprocess audio and images
             audio = audio.to(config['device']).to(torch.float16)
@@ -168,19 +178,19 @@ if __name__ == "__main__":
             # Backpropagation and optimization
             optimizer.zero_grad()
             loss.backward()
-            for param in conditional_unet.audio_conditioning.parameters():
-                print(f"Before optimizer step: {param.data}")
+            # for param in conditional_unet.audio_conditioning.parameters():
+            #     print(f"Before optimizer step: {param.data}")
 
             optimizer.step()
 
-            for param in conditional_unet.audio_conditioning.parameters():
-                print(f"After optimizer step: {param.data}")
+            # for param in conditional_unet.audio_conditioning.parameters():
+            #     print(f"After optimizer step: {param.data}")
 
-            print(f"Epoch {epoch+1}, Loss: {loss.item()}")
-            if epoch == 1:
-                exit()
+            total_loss += loss.item()
+
+        print(f"Epoch {epoch+1}, Loss: {total_loss / len(train_dataloader)}")
 
     # Example usage - Load one audio embedding from dataset
 
     audio_embedding = val.dataset.audio_data[0]
-    # generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler)
+    generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler)
