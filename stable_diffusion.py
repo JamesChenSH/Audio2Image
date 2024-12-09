@@ -22,6 +22,8 @@ np.random.seed(42)
 torch.manual_seed(42)
 torch.cuda.manual_seed_all(42)
 
+GENERATOR = torch.Generator(device='cuda').manual_seed(42)
+
 '''
 =======================  !!!NOTE!!! ==============================
 I am currently stopping here since Open L3 does not have pytorch support
@@ -52,6 +54,8 @@ class AudioConditionalUNet(nn.Module):
         audio_embed = self.audio_conditioning(audio_input)
 
         # Placeholder for audio embedding, used for testing unconditional diffusion
+        uncond_placeholder = torch.zeros_like(audio_embed)
+        audio_embed_input = torch.cat([uncond_placeholder, audio_embed])
 
         # Debug use: Try text prompt
         # prompt = "Beautiful picture of a wave breaking"  # @param
@@ -61,7 +65,7 @@ class AudioConditionalUNet(nn.Module):
 
         # print(f"audio_embed shape: {audio_embed.shape}")
         # Pass to UNet
-        return self.unet(latent_image, timestep, encoder_hidden_states=audio_embed)
+        return self.unet(latent_image, timestep, encoder_hidden_states=audio_embed_input)
 
 
 '''
@@ -76,16 +80,17 @@ def generate_image_from_text(pipe):
     '''
 
     device = "cuda"
-    guidance_scale = 8  # @param
-    num_inference_steps = 30  # @param
-    prompt = "Beautiful picture of a wave breaking"  # @param
-    negative_prompt = "zoomed in, blurry, oversaturated, warped"  # @param
+    guidance_scale = 7.5  # @param
+    num_inference_steps = 35  # @param
+    prompt = "A car hanging on a bridge"  # @param
+    negative_prompt = None  # @param
 
     # Encode the prompt
     text_embeddings = pipe._encode_prompt(prompt, device, 1, True, negative_prompt)
+    print(text_embeddings)
     print(text_embeddings.shape)
     # Create our random starting point
-    latents = torch.randn((1, 4, 32, 32), device=device)
+    latents = torch.randn((1, 4, 32, 32), device=device, generator=GENERATOR)
     latents *= pipe.scheduler.init_noise_sigma
 
     # Prepare the scheduler
@@ -121,7 +126,13 @@ def generate_image_from_text(pipe):
 
 
 # For inference
-def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, vae, scheduler, num_steps=50):
+def generate_image_from_audio(
+        audio_embedding:torch.Tensor, 
+        conditional_unet:AudioConditionalUNet, 
+        vae, 
+        scheduler, 
+        num_steps=50
+    ):
 
 
     # Initialize random latent vector
@@ -129,7 +140,7 @@ def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, va
     # image_latents = torch.randn(1, latent_dim, 256, 256).to("cuda")
     ################## Fix suggested by GPT #######################
     latent_dim = (1, 4, 32, 32)  # Match UNet in_channels
-    image_latents = torch.randn(latent_dim).to("cuda")
+    image_latents = torch.randn(latent_dim, device='cuda', generator=GENERATOR)
     image_latents *= scheduler.init_noise_sigma
     ###############################################################
     audio_embedding = audio_embedding.to("cuda")
@@ -141,14 +152,14 @@ def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, va
     # Iterative denoising
     for i, t in tqdm(enumerate(scheduler.timesteps)):
 
-        image_latents_input = image_latents
+        image_latents_input = torch.cat([image_latents] * 2)
         image_latents_input = scheduler.scale_model_input(image_latents_input, t)
         
         with torch.no_grad(), autocast("cuda",):
             noise_pred = conditional_unet(image_latents_input, timestep=t, audio_input=audio_embedding).sample
             
-        # noise_pred_uncond, noise_pred_text = predicted_noise.chunk(2)
-        # noise_pred = noise_pred_uncond + 8 * (noise_pred_text - noise_pred_uncond)
+        noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+        noise_pred = noise_pred_uncond + 8 * (noise_pred_text - noise_pred_uncond)
 
         image_latents = scheduler.step(noise_pred, t, image_latents).prev_sample
 
@@ -179,6 +190,8 @@ if __name__ == "__main__":
     # image = pipe(prompt).images[0]  
         
     # image.save("astronaut_rides_horse.png")
+    # exit()
+
     print("Model loaded")
 
     config = {
@@ -274,25 +287,12 @@ if __name__ == "__main__":
 
             # Backpropagation and optimization
             scaler.scale(loss).backward()
-            # for name, param in conditional_unet.named_parameters():
-            #     if param.requires_grad:
-            #         if param.grad is None:
-            #             print(f"Gradient for {name} is None")
-            #         else:
-            #             print(f"Gradient for {name}: Norm = {param.grad.norm()}")
 
             torch.nn.utils.clip_grad_norm_(conditional_unet.parameters(), max_norm=1.0)
             scaler.step(optimizer)
             scaler.update()
             
             optimizer.zero_grad()
-            # for name, param in conditional_unet.named_parameters():
-                # print(f"Parameter: {name}, Before optimizer step: {param.mean()}")
-
-            # optimizer.step()
-
-            # for name, param in conditional_unet.named_parameters():
-            #     print(f"Parameter: {name}, After optimizer step: {param.mean()}")
 
             total_loss += loss.item()
 
