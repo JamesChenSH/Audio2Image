@@ -48,6 +48,8 @@ if __name__ == "__main__":
     audio_embedding_dim = 6144
     condition_embedding_dim = 1024
     conditional_unet = AudioConditionalUNet(pipe.unet, audio_embedding_dim, condition_embedding_dim).to('cuda')
+    conditional_unet.load_state_dict(torch.load('diffusion_models/conditional_unet.pth'))
+
 
     # Sample
     audio_embedding = train.dataset.audio_data[10].unsqueeze(0)
