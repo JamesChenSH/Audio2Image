@@ -52,6 +52,7 @@ class AudioConditionalUNet(nn.Module):
         audio_embed = self.audio_conditioning(audio_input)
 
         # Placeholder for audio embedding, used for testing unconditional diffusion
+        placeholder = torch.zeros_like(audio_embed)
 
         # Debug use: Try text prompt
         # prompt = "Beautiful picture of a wave breaking"  # @param
@@ -61,7 +62,7 @@ class AudioConditionalUNet(nn.Module):
 
         # print(f"audio_embed shape: {audio_embed.shape}")
         # Pass to UNet
-        return self.unet(latent_image, timestep, encoder_hidden_states=audio_embed)
+        return self.unet(latent_image, timestep, encoder_hidden_states=placeholder)
 
 
 '''
@@ -187,7 +188,7 @@ if __name__ == "__main__":
         'train ratio': 0.9,
         'validation ratio': 0.1,
         'device': 'cuda',
-        'epochs': 5000,
+        'epochs': 280,
         'linear_lr': 1e-3,
         'unet_lr': 1e-5,
 
@@ -195,7 +196,7 @@ if __name__ == "__main__":
     }
 
     # Load the dataset
-    ds_path = "data/DS_airport_diffusion.pt"
+    ds_path = "data/DS_diffusion.pt"
     ds = torch.load(ds_path, weights_only=False)
     
     # Split Train, Val, Test
