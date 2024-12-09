@@ -9,7 +9,6 @@ import torch, random
 import torch.nn as nn
 import torch.nn.init as init
 import torch.optim as optim
-import torchsummary
 import soundfile as sf
 import numpy as np
 
@@ -17,7 +16,7 @@ from torch.amp import autocast
 from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
 from PIL import Image
 
-from stable_diffusion import generate_image_from_audio, AudioConditionalUNet
+from stable_diffusion_openl3 import generate_image_from_audio, AudioConditionalUNet
 
 random.seed(42)
 np.random.seed(42)
@@ -48,11 +47,11 @@ if __name__ == "__main__":
     audio_embedding_dim = 6144
     condition_embedding_dim = 1024
     conditional_unet = AudioConditionalUNet(pipe.unet, audio_embedding_dim, condition_embedding_dim).to('cuda')
-    conditional_unet.load_state_dict(torch.load('diffusion_models/conditional_unet.pth'))
+    conditional_unet.load_state_dict(torch.load('diffusion_models/conditional_unet.pth', weights_only=True))
 
 
     # Sample
-    audio_embedding = train.dataset.audio_data[10].unsqueeze(0)
-    image = train.dataset.img_data[10]
+    audio_embedding = train.dataset.audio_data[0].unsqueeze(0)
+    image = train.dataset.img_data[0]
     image.save(f'original_image.jpg')
-    generate_image_from_audio(audio_embedding, conditional_unet, pipe.vae, scheduler, 400)
+    generate_image_from_audio(audio_embedding, conditional_unet, pipe.vae, scheduler, 1000)

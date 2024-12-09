@@ -200,7 +200,7 @@ if __name__ == "__main__":
         'train ratio': 0.9,
         'validation ratio': 0.1,
         'device': 'cuda',
-        'epochs': 5000,
+        'epochs': 280,
         'linear_lr': 1e-3,
         'unet_lr': 1e-5,
 
@@ -208,7 +208,7 @@ if __name__ == "__main__":
     }
 
     # Load the dataset
-    ds_path = "data/DS_airport_diffusion.pt"
+    ds_path = "data/DS_diffusion.pt"
     ds = torch.load(ds_path, weights_only=False)
     
     # Split Train, Val, Test

@@ -11,7 +11,7 @@ from tqdm import tqdm
 def positional_encoding_sinusoidal(
     model_dim:int, 
     seq_len:int=100, 
-    temp:int=10000
+    temp:int=10000,
     ):
     '''
     Sinosoidal Positional Encoding
@@ -313,7 +313,9 @@ class Audio2ImageModel(nn.Module):
     def __init__(
         self, 
         audio_depth:int, 
+        audio_len:int,
         img_depth: int,
+        img_len:int,
         embedding_dim:int, 
         encoder_head_num:int, 
         decoder_head_num:int,
@@ -342,8 +344,8 @@ class Audio2ImageModel(nn.Module):
         self.img_sos, self.img_eos, self.img_pad = img_special_token
         self.audio_sos, self.aud_eos, self.audio_pad = aud_special_tokens
         
-        self.aud_pe = positional_encoding_sinusoidal(embedding_dim, 499).to(self.device)
-        self.img_pe = positional_encoding_sinusoidal(embedding_dim, 32*32).to(self.device)
+        self.aud_pe = positional_encoding_sinusoidal(embedding_dim, audio_len).to(self.device)
+        self.img_pe = positional_encoding_sinusoidal(embedding_dim, img_len).to(self.device)
         
         self.audio_embedding = TransformerLinearEmbedding(audio_depth, embedding_dim)             # [batch_size, aud_len, embedding_dim]
         self.img_embedding = TransformerValueEmbedding(img_depth, embedding_dim)                 # [batch_size, img_len, embedding_dim]
@@ -475,7 +477,7 @@ class Audio2ImageModel(nn.Module):
         return generated_token
 
 
-    def generate_image(self, input_tokens:torch.Tensor, max_len:int=1024, min_len:int=1024, process_bar:bool=False, sampling=False):
+    def generate_image(self, input_tokens:torch.Tensor, img_len:int=1024, process_bar:bool=False, sampling=False):
         """
         Generate image from audio input. Use Greedy Decode ATM.
         
@@ -491,9 +493,9 @@ class Audio2ImageModel(nn.Module):
         encoded_src = self.encoder(src_x, src_mask)
         
         if process_bar:
-            iterative = tqdm(range(max_len))
+            iterative = tqdm(range(img_len))
         else:
-            iterative = range(max_len)
+            iterative = range(img_len)
 
         for _ in iterative:
             tgt_causal_mask = self.generate_causal_mask(generation_seq).unsqueeze(0).repeat(generation_seq.size(0), 1, 1)
@@ -513,8 +515,6 @@ class Audio2ImageModel(nn.Module):
             else:
                 generated_token = self.sampling_alg(decoded_seq, 0.8)
             generation_seq = torch.cat([generation_seq, generated_token], dim=1)
-            if (generated_token == self.img_eos).all() and generation_seq.size(1) >= min_len:
-                break
         
         # TODO: Use softmax to get pixel value of entire image
         img_out = generation_seq[:, 1:]
