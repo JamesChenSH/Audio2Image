@@ -130,7 +130,7 @@ def generate_image_from_audio(audio_embedding:torch.Tensor, conditional_unet, va
     ################## Fix suggested by GPT #######################
     latent_dim = (1, 4, 32, 32)  # Match UNet in_channels
     image_latents = torch.randn(latent_dim).to("cuda")
-    image_latents *= pipe.scheduler.init_noise_sigma
+    image_latents *= scheduler.init_noise_sigma
     ###############################################################
     audio_embedding = audio_embedding.to("cuda")
 
