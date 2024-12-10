@@ -490,7 +490,7 @@ def imagebind_huge(pretrained=False):
     )
 
     if pretrained:
-        if not os.path.exists(".checkpoints/imagebind_huge.pth"):
+        if not os.path.exists("../checkpoints/imagebind_huge.pth"):
             print(
                 "Downloading imagebind weights to .checkpoints/imagebind_huge.pth ..."
             )
