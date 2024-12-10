@@ -18,9 +18,9 @@ from sample_diffusion_imagebind import generate_image_from_audio
 
 sys.path.append('../')
 from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
-from imagebind import data as ib_data
-from imagebind.models import imagebind_model as ib_model
-from imagebind.models.imagebind_model import ModalityType
+# from imagebind import data as ib_data
+# from imagebind.models import imagebind_model as ib_model
+# from imagebind.models.imagebind_model import ModalityType
 
 random.seed(42)
 np.random.seed(42)
@@ -46,7 +46,7 @@ if __name__ == "__main__":
         'device': 'cuda',
 
         ########### batch size restricted to be 16 in forward pass??? #################
-        'batch size': 2,
+        'batch size': 16,
         'train ratio': 0.9,
         'validation ratio': 0.1,
         'device': 'cuda',
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     device = config['device']
 
     # Load the dataset
-    ds_path = "../data/DS_ib_airport.pt"
+    ds_path = "../data/DS_ib.pt"
     ds = torch.load(ds_path, weights_only=False)
 
     # Split Train, Val, Test
@@ -67,7 +67,7 @@ if __name__ == "__main__":
     val_size = len(ds) - train_size
     
     train, val = torch.utils.data.random_split(ds, [train_size, val_size])
-    train = Subset(train, range(4))
+    # train = Subset(train, range(4))
     train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
     val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)   
     print("Dataset loaded")
@@ -76,7 +76,6 @@ if __name__ == "__main__":
     ========================= Model Additional Layers =========================
     '''
     # Define the model additional layers
-    image_bind = ib_model.imagebind_huge(True).eval().to('cuda')
     unet = pipe.unet
     vae = pipe.vae
     image_encoder = pipe._encode_image
@@ -96,9 +95,6 @@ if __name__ == "__main__":
     unet.requires_grad_(True)
 
     pipe.text_encoder.requires_grad_(False)
-
-    image_bind.requires_grad_(False)
-
 
     # Use common text prompt embed
     # Prepare Placeholder Text Prompts:
@@ -122,7 +118,6 @@ if __name__ == "__main__":
         total_loss = 0
 
         for audio_embedding, images in tqdm(train_dataloader):
-            
             # Prepare Placeholder Text Prompts:
             prompt = ""
             prompt_embeds, negative_prompt_embeds = pipe._encode_prompt(
@@ -132,14 +127,12 @@ if __name__ == "__main__":
                 do_classifier_free_guidance=True
             )
             # prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-            prompt_embeds = prompt_embeds.unsqueeze(0).repeat(config['batch size'], 1, 1)
+            prompt_embeds = prompt_embeds.unsqueeze(0).repeat(audio_embedding.shape[0], 1, 1)
 
             # Preprocess audio and images
             audio_embedding = audio_embedding.to(device)
             clean_images = images.to(device)
 
-            # Add placeholder prompts
-            encoder_hidden_stataes = prompt_embeds.unsqueeze(0).repeat(audio.shape[0], 1, 1)
 
             # Config timesteps
             timesteps = torch.randint(
@@ -171,7 +164,7 @@ if __name__ == "__main__":
                 # noisy_latents = posterior + noise
                 noisy_latents = scheduler.add_noise(posterior, noise, timesteps)
                 # Predict noise with conditional UNet
-                predicted_noise = unet(noisy_latents, timesteps, encoder_hidden_states=encoder_hidden_stataes, class_labels=img_embedding).sample
+                predicted_noise = unet(noisy_latents, timesteps, encoder_hidden_states=prompt_embeds, class_labels=img_embedding).sample
                 # Compute loss
                 loss = criterion(predicted_noise, noise)
 
@@ -192,5 +185,7 @@ if __name__ == "__main__":
 
     # Example usage - Load one audio embedding from dataset
 
-    audio_embedding = val.dataset.audio_data[0].unsqueeze(0)
-    generate_image_from_audio(audio_embedding, pipe, image_bind, scheduler)
+    # audio_embedding = val.dataset.audio_data[0].unsqueeze(0)
+
+    # image_bind = ib_model.imagebind_huge(True).eval().to('cuda')
+    # generate_image_from_audio(audio_embedding, pipe, image_bind, scheduler)
