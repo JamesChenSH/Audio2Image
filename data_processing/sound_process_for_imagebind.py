@@ -7,6 +7,7 @@ import imagebind as ib
 def process_audio_files(root_dir, target_dir):
     count = 0
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    imagebind_model = ib.imagebind_model.imagebind_huge(pretrained=True).eval().to(device)
 
     if not os.path.exists(target_dir):
         os.makedirs(target_dir)
@@ -25,7 +26,18 @@ def process_audio_files(root_dir, target_dir):
         # Embedding these sounds
         with torch.no_grad():
             audio_paths = files
-            embeddings = ib.data.load_and_transform_audio_data(audio_paths, device)
+            # embeddings = ib.data.load_and_transform_audio_data(audio_paths, device)
+            # print(f'Embedded Tensor shape: {embeddings.shape}')
+            audio_tokens = ib.data.load_and_transform_audio_data(audio_paths, device)
+
+            # Apply batching
+            embeddings = []
+            for i in range(0, audio_tokens.shape[0], 430):
+                audio_tokens_batch = audio_tokens[i:i+430]
+                embeddings.append(imagebind_model.forward({
+                    ib.ModalityType.AUDIO: audio_tokens_batch
+                })[ib.ModalityType.AUDIO])
+            embeddings = torch.cat(embeddings, dim=0)
             print(f'Embedded Tensor shape: {embeddings.shape}')
         
         # Save the embedded files in this subfolder as a tensor:
