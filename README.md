@@ -26,8 +26,14 @@ After ssh into comps0.cs.toronto.edu from cs.toronto.edu, run:
 
 ```
 source /w/247/jameschen/Audio2Image/venv/bin/activate
+source /w/284/jerryzhao/Audio2Image/.venv/bin/activate
 
 srun --partition=gpunodes -c 1 --mem=16G --gres=gpu:rtx_4090:1 -t 5-0 --pty <bash_name.sh>
+srun --partition=gpunodes -c 1 --mem=16G --gres=gpu:rtx_4090:1 -t 1-0 --pty run_gpu.sh
+srun --partition=gpunodes -c 1 --mem=16G --gres=gpu:rtx_a6000:1 -t 1-0 --pty run_gpu.sh
+
+srun --partition=gpunodes -c 1 --mem=32G --gres=gpu:rtx_4090:1 -t 1-0 --pty python stable_diffusion_imagebind.py
+srun --partition=gpunodes -c 1 --mem=32G --gres=gpu:rtx_a6000:1 -t 1-0 --pty python stable_diffusion_imagebind.py
 ```
 
 ## About using Mountable Terminal
@@ -45,4 +51,4 @@ tmux attach -t <termial name>
 ```
 
 '''
-drives used: 247-james, 284-james, 284-jerry, 331-eric
+drives used: 247-james, 284-james, 284-jerry, 331-eric, 246-jerry
