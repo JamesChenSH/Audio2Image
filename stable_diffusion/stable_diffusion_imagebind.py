@@ -43,7 +43,7 @@ if __name__ == "__main__":
 
     config = {
         ########### batch size restricted to be 16 in forward pass??? #################
-        'batch size': 32,
+        'batch size': 2,
         'train ratio': 0.9,
         'validation ratio': 0.1,
         'device': 'cuda',
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     }
 
     # Load the dataset
-    ds_path = "data/DS_diffusion.pt"
+    ds_path = "../data/DS_diffusion_ib.pt"
     ds = torch.load(ds_path, weights_only=False)
     
     # Split Train, Val, Test
@@ -77,13 +77,6 @@ if __name__ == "__main__":
     unet = pipe.unet
     vae = pipe.vae
 
-    '''
-    ========================= Test Model ==========================
-    '''
-    # audio_embedding = val.dataset.audio_data[0]
-    # print(scheduler.num_train_timesteps)
-    # generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler)
-    # exit()
     '''
     ========================= Model Training =========================
     '''
@@ -132,7 +125,7 @@ if __name__ == "__main__":
                 noisy_latents = scheduler.add_noise(posterior, noise, timesteps)
 
                 # Predict noise with conditional UNet
-                predicted_noise = unet(noisy_latents, timesteps, encoder_hidden_states=audio_embedding).sample
+                predicted_noise = unet(noisy_latents, timesteps, class_labels=audio_embedding).sample
                 # Compute loss
                 loss = criterion(predicted_noise, noise)
 
@@ -150,7 +143,7 @@ if __name__ == "__main__":
         print(f"Epoch {epoch+1}, Loss: {total_loss / len(train_dataloader)}")
 
     # Save the model
-    torch.save(unet.state_dict(), "diffusion_models/imagebind_trained_unet.pth")
+    torch.save(unet.state_dict(), "./imagebind_trained_unet.pth")
 
     # Example usage - Load one audio embedding from dataset
 
