@@ -128,9 +128,8 @@ if __name__ == "__main__":
     
     sound_root_dir = os.path.join(dataset_folder, "sound")
     processed_dir = os.path.join(dataset_folder, "audio_processed")
-    process_audio_files(sound_root_dir, processed_dir)
-
     # process_audio_files(sound_root_dir, processed_dir)
+
     joint_dir = os.path.join(dataset_folder, "audio_airport_tensor.pt")
     # joint_dir = os.path.join(dataset_folder, "audio_tensor.pt")
     build_joint_sound_tensor(processed_dir, joint_dir)
