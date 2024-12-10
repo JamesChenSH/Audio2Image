@@ -94,7 +94,25 @@ if __name__ == "__main__":
     # Everything about gradient
     vae.requires_grad_(False)
     unet.requires_grad_(True)
+
+    pipe.text_encoder.requires_grad_(False)
+
     image_bind.requires_grad_(False)
+
+
+    # Use common text prompt embed
+    # Prepare Placeholder Text Prompts:
+    prompt = ""
+    prompt_embeds, negative_prompt_embeds = pipe._encode_prompt(
+        prompt=prompt,
+        device=device,
+        num_images_per_prompt=1,
+        do_classifier_free_guidance=True
+    )
+    # prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
+    prompt_embeds = prompt_embeds.unsqueeze(0).repeat(config['batch size'], 1, 1)
+    prompt_embeds.requires_grad_(False)
+
 
     # Scaler for mixed precision
     scaler = torch.amp.GradScaler(device)
