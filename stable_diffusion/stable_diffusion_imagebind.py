@@ -67,6 +67,7 @@ if __name__ == "__main__":
     val_size = len(ds) - train_size
     
     train, val = torch.utils.data.random_split(ds, [train_size, val_size])
+    train = Subset(train, range(200))
     train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
     val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)   
     print("Dataset loaded")
@@ -109,7 +110,6 @@ if __name__ == "__main__":
         do_classifier_free_guidance=True
     )
     # prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-    prompt_embeds = prompt_embeds.unsqueeze(0).repeat(config['batch size'], 1, 1)
     prompt_embeds.requires_grad_(False)
 
 
@@ -122,10 +122,15 @@ if __name__ == "__main__":
         total_loss = 0
 
         for audio, images in tqdm(train_dataloader):
-            
+
             # Preprocess audio and images
             audio = audio.to(device)
             clean_images = images.to(device)
+
+            # Add placeholder prompts
+            encoder_hidden_stataes = prompt_embeds.unsqueeze(0).repeat(audio.shape[0], 1, 1)
+
+            # Config timesteps
             timesteps = torch.randint(
                 0,
                 scheduler.num_train_timesteps,
@@ -159,7 +164,7 @@ if __name__ == "__main__":
                 # noisy_latents = posterior + noise
                 noisy_latents = scheduler.add_noise(posterior, noise, timesteps)
                 # Predict noise with conditional UNet
-                predicted_noise = unet(noisy_latents, timesteps, encoder_hidden_states=prompt_embeds, class_labels=img_embedding).sample
+                predicted_noise = unet(noisy_latents, timesteps, encoder_hidden_states=encoder_hidden_stataes, class_labels=img_embedding).sample
                 # Compute loss
                 loss = criterion(predicted_noise, noise)
 
