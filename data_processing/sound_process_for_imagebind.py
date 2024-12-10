@@ -19,8 +19,6 @@ def process_audio_files(root_dir, target_dir):
         files = [f.path for f in os.scandir(subfolder) if f.is_file()]
         files.sort()  # Sorting files in lexicographical order
 
-        files = files[0:4]
-
         # Embedding these sounds
         with torch.no_grad():
             audio_paths = files
