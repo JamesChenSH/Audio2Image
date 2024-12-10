@@ -59,7 +59,7 @@ if __name__ == "__main__":
     device = config['device']
 
     # Load the dataset
-    ds_path = "../data/DS_diffusion_ib.pt"
+    ds_path = "../data/DS_ib_airport.pt"
     ds = torch.load(ds_path, weights_only=False)
 
     # Split Train, Val, Test
@@ -67,7 +67,7 @@ if __name__ == "__main__":
     val_size = len(ds) - train_size
     
     train, val = torch.utils.data.random_split(ds, [train_size, val_size])
-    train = Subset(train, range(2))
+    train = Subset(train, range(4))
     train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
     val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)   
     print("Dataset loaded")
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         
         total_loss = 0
 
-        for audio, images in tqdm(train_dataloader):
+        for audio_embedding, images in tqdm(train_dataloader):
             
             # Prepare Placeholder Text Prompts:
             prompt = ""
@@ -117,28 +117,23 @@ if __name__ == "__main__":
             # prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
             prompt_embeds = prompt_embeds.unsqueeze(0).repeat(config['batch size'], 1, 1)
 
-
             # Preprocess audio and images
-            audio = audio.to(device)
+            audio_embedding = audio_embedding.to(device)
             clean_images = images.to(device)
             timesteps = torch.randint(
                 0,
                 scheduler.num_train_timesteps,
-                (audio.shape[0],),
+                (audio_embedding.shape[0],),
                 device=clean_images.device,
             ).long()
 
             with autocast(device,):
 
-                audio_embedding = image_bind.forward({
-                    ModalityType.AUDIO: audio
-                })[ModalityType.AUDIO]
-
                 # Pass audio embedding through image encoder
                 _, img_embedding = image_encoder(
                     image=None,
                     device=device,
-                    batch_size=audio.shape[0],
+                    batch_size=audio_embedding.shape[0],
                     num_images_per_prompt=1,
                     do_classifier_free_guidance=True,
                     noise_level=0,
