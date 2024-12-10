@@ -1,7 +1,7 @@
-import os
-os.environ['HF_HOME'] = './cache/'
+import os, sys
+os.environ['HF_HOME'] = '../cache/'
 
-from diffusers import StableDiffusionPipeline, EulerDiscreteScheduler, DDIMScheduler
+from diffusers import StableUnCLIPImg2ImgPipeline, EulerDiscreteScheduler, DDIMScheduler
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
@@ -11,9 +11,12 @@ import torch.optim as optim
 import numpy as np
 
 from torch.amp import autocast
-from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
 from PIL import Image
 
+from sample_diffusion_imagebind import generate_image_from_audio
+
+sys.path.append('../')
+from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
 from imagebind import data as ib_data
 from imagebind.models import imagebind_model as ib_model
 from imagebind.models.imagebind_model import ModalityType
@@ -25,11 +28,11 @@ torch.cuda.manual_seed_all(42)
 
 
 if __name__ == "__main__":
-    model_id = "stabilityai/stable-diffusion-2-1-base"
+    model_id = "stabilityai/stable-diffusion-2-1-unclip"
 
     # Sample Code
     scheduler = EulerDiscreteScheduler.from_pretrained(model_id, subfolder="scheduler")
-    pipe = StableDiffusionPipeline.from_pretrained(model_id, scheduler=scheduler)
+    pipe = StableUnCLIPImg2ImgPipeline.from_pretrained(model_id, scheduler=scheduler)
     pipe = pipe.to("cuda")
 
     # prompt = "a photo of an astronaut riding a horse on mars"
@@ -120,7 +123,7 @@ if __name__ == "__main__":
                     ModalityType.AUDIO, audio
                 })
 
-                latents = vae.encode(clean_images).latent_dist
+                latents = vae.encode(clean_images).latent_dist.sample().detach()
                 posterior = latents.sample() * 0.18215
 
                 # Add noise
