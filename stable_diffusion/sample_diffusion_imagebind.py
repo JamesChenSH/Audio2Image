@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     imagebind_model = ib_model.imagebind_huge(pretrained=True).eval().to('cuda')
 
-    audio_sample_path = ["../data/sound/airport/00063.wav"]
+    audio_sample_path = ["../data/sound/airport/00063_3.wav"]
     audio_tokenized = ib_data.load_and_transform_audio_data(audio_sample_path, 'cuda')
 
     # Sample
@@ -124,5 +124,7 @@ if __name__ == "__main__":
     image_embedding = imagebind_model.forward({
         ModalityType.AUDIO: audio_tokenized
     })[ModalityType.AUDIO]
+
+    # image_embedding = torch.zeros_like(image_embedding)
     pipe(prompt_embeds=cond_embedding, negative_prompt_embeds = uncond_embedding, height=256, width=256, image_embeds=image_embedding).images[0].save(f'generated_image.jpg')
     # generate_image_from_audio(audio_tokenized, pipe, imagebind_model, scheduler, 50)

@@ -1,5 +1,5 @@
 import os, sys
-os.environ['HF_HOME'] = './cache/'
+os.environ['HF_HOME'] = '../cache/'
 
 sys.path.append('../')
 import imagebind as ib

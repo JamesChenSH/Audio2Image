@@ -246,10 +246,10 @@ if __name__ == "__main__":
     # print(scheduler.num_train_timesteps)
     # generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler)
     # generate_image_from_text(pipe)
-    negative_prompt = torch.zeros((1, 77, 1024)).to("cuda")
-    conditional_embed = torch.zeros((1, 77, 1024)).to("cuda")
-    pipe(prompt_embeds=conditional_embed, negative_prompt_embeds = negative_prompt).images[0].save("cat_forest.jpg")
-    exit()   
+    # negative_prompt = torch.zeros((1, 77, 1024)).to("cuda")
+    # conditional_embed = torch.zeros((1, 77, 1024)).to("cuda")
+    # pipe(prompt_embeds=conditional_embed, negative_prompt_embeds = negative_prompt).images[0].save("cat_forest.jpg")
+    # exit()   
     '''
     ========================= Model Training =========================
     '''
