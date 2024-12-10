@@ -67,7 +67,6 @@ if __name__ == "__main__":
     val_size = len(ds) - train_size
     
     train, val = torch.utils.data.random_split(ds, [train_size, val_size])
-    train = Subset(train, range(2))
     train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
     val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)   
     print("Dataset loaded")
@@ -94,7 +93,25 @@ if __name__ == "__main__":
     # Everything about gradient
     vae.requires_grad_(False)
     unet.requires_grad_(True)
+
+    pipe.text_encoder.requires_grad_(False)
+
     image_bind.requires_grad_(False)
+
+
+    # Use common text prompt embed
+    # Prepare Placeholder Text Prompts:
+    prompt = ""
+    prompt_embeds, negative_prompt_embeds = pipe._encode_prompt(
+        prompt=prompt,
+        device=device,
+        num_images_per_prompt=1,
+        do_classifier_free_guidance=True
+    )
+    # prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
+    prompt_embeds = prompt_embeds.unsqueeze(0).repeat(config['batch size'], 1, 1)
+    prompt_embeds.requires_grad_(False)
+
 
     # Scaler for mixed precision
     scaler = torch.amp.GradScaler(device)
@@ -106,18 +123,6 @@ if __name__ == "__main__":
 
         for audio, images in tqdm(train_dataloader):
             
-            # Prepare Placeholder Text Prompts:
-            prompt = ""
-            prompt_embeds, negative_prompt_embeds = pipe._encode_prompt(
-                prompt=prompt,
-                device=device,
-                num_images_per_prompt=1,
-                do_classifier_free_guidance=True
-            )
-            # prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-            prompt_embeds = prompt_embeds.unsqueeze(0).repeat(config['batch size'], 1, 1)
-
-
             # Preprocess audio and images
             audio = audio.to(device)
             clean_images = images.to(device)
