@@ -8,6 +8,7 @@ from tqdm import tqdm
 import torch, random
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import Subset
 import numpy as np
 
 from torch.amp import autocast
@@ -42,40 +43,43 @@ if __name__ == "__main__":
     print("Model loaded")
 
     config = {
+        'device': 'cuda',
+
         ########### batch size restricted to be 16 in forward pass??? #################
         'batch size': 2,
         'train ratio': 0.9,
         'validation ratio': 0.1,
         'device': 'cuda',
         'epochs': 280,
-        'linear_lr': 1e-3,
         'unet_lr': 1e-5,
 
         'condition_embedding_dim': 1024
     }
 
+    device = config['device']
+
     # Load the dataset
     ds_path = "../data/DS_diffusion_ib.pt"
     ds = torch.load(ds_path, weights_only=False)
-    
+
     # Split Train, Val, Test
     train_size = int(config['train ratio']*len(ds))
     val_size = len(ds) - train_size
     
     train, val = torch.utils.data.random_split(ds, [train_size, val_size])
-    # train = Subset(train, range(1))
+    train = Subset(train, range(2))
     train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
     val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)   
+    print("Dataset loaded")
 
     '''
     ========================= Model Additional Layers =========================
     '''
     # Define the model additional layers
-    audio_embedding_dim = 6144
-    condition_embedding_dim = config['condition_embedding_dim']
     image_bind = ib_model.imagebind_huge(True).eval().to('cuda')
     unet = pipe.unet
     vae = pipe.vae
+    image_encoder = pipe._encode_image
 
     '''
     ========================= Model Training =========================
@@ -90,9 +94,10 @@ if __name__ == "__main__":
     # Everything about gradient
     vae.requires_grad_(False)
     unet.requires_grad_(True)
+    image_bind.requires_grad_(False)
 
     # Scaler for mixed precision
-    scaler = torch.amp.GradScaler("cuda")
+    scaler = torch.amp.GradScaler(device)
     unet.train()
     # Training loop
     for epoch in range(config['epochs']):
@@ -100,9 +105,22 @@ if __name__ == "__main__":
         total_loss = 0
 
         for audio, images in tqdm(train_dataloader):
+            
+            # Prepare Placeholder Text Prompts:
+            prompt = ""
+            prompt_embeds, negative_prompt_embeds = pipe._encode_prompt(
+                prompt=prompt,
+                device=device,
+                num_images_per_prompt=1,
+                do_classifier_free_guidance=True
+            )
+            # prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
+            prompt_embeds = prompt_embeds.unsqueeze(0).repeat(config['batch size'], 1, 1)
+
+
             # Preprocess audio and images
-            audio = audio.to(config['device'])
-            clean_images = images.to(config['device'])
+            audio = audio.to(device)
+            clean_images = images.to(device)
             timesteps = torch.randint(
                 0,
                 scheduler.num_train_timesteps,
@@ -110,28 +128,38 @@ if __name__ == "__main__":
                 device=clean_images.device,
             ).long()
 
-            with autocast("cuda",):
+            with autocast(device,):
 
-                audio_embedding = image_bind({
-                    ModalityType.AUDIO, audio
-                })
+                audio_embedding = image_bind.forward({
+                    ModalityType.AUDIO: audio
+                })[ModalityType.AUDIO]
+
+                # Pass audio embedding through image encoder
+                _, img_embedding = image_encoder(
+                    image=None,
+                    device=device,
+                    batch_size=audio.shape[0],
+                    num_images_per_prompt=1,
+                    do_classifier_free_guidance=True,
+                    noise_level=0,
+                    generator=None,
+                    image_embeds=audio_embedding,
+                ).chunk(2)
 
                 latents = vae.encode(clean_images).latent_dist.sample().detach()
-                posterior = latents.sample() * 0.18215
+                posterior = latents * 0.18215
 
                 # Add noise
                 noise = torch.randn_like(posterior)
                 # noisy_latents = posterior + noise
                 noisy_latents = scheduler.add_noise(posterior, noise, timesteps)
-
                 # Predict noise with conditional UNet
-                predicted_noise = unet(noisy_latents, timesteps, class_labels=audio_embedding).sample
+                predicted_noise = unet(noisy_latents, timesteps, encoder_hidden_states=prompt_embeds, class_labels=img_embedding).sample
                 # Compute loss
                 loss = criterion(predicted_noise, noise)
 
             # Backpropagation and optimization
             scaler.scale(loss).backward()
-
             torch.nn.utils.clip_grad_norm_(unet.parameters(), max_norm=1.0)
             scaler.step(optimizer)
             scaler.update()
