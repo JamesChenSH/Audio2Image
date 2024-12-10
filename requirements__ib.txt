@@ -12,4 +12,4 @@ iopath
 numpy>=1.19
 matplotlib
 types-regex
-cartopy
+# cartopy
