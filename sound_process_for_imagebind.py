@@ -21,7 +21,7 @@ def process_audio_files(root_dir, target_dir, model):
     for subfolder in subfolders:
         # Pre-processing
         print(f'Embedding {subfolder} ...')
-              
+
         # Get and sort all files in the current subfolder
         files = [f.path for f in os.scandir(subfolder) if f.is_file()]
         files.sort()  # Sorting files in lexicographical order
