@@ -1,4 +1,4 @@
-import os
+import os, sys
 os.environ['HF_HOME'] = '../cache/'
 
 from diffusers import StableUnCLIPImg2ImgPipeline, EulerDiscreteScheduler, DDIMScheduler
@@ -11,9 +11,12 @@ import torch.optim as optim
 import numpy as np
 
 from torch.amp import autocast
-from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
 from PIL import Image
 
+from sample_diffusion_imagebind import generate_image_from_audio
+
+sys.path.append('../')
+from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
 from imagebind import data as ib_data
 from imagebind.models import imagebind_model as ib_model
 from imagebind.models.imagebind_model import ModalityType
