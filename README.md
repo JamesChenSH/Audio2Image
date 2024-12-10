@@ -4,6 +4,18 @@ This is the course project for CSC2541 Generative AI in Machine Learning at Univ
 ## Venv
 Currently using venv in /w/246
 
+## Environment Setup
+```
+pip install -r requirements.txt
+```
+Note that pytorchvideo is deprecated and using old pytorch functions, we will 
+need to go into pytorchvideo module, change the import file in the script
+`<path to library>/pytorchvideo/transforms/augmentation.py`'s 9th line
+as following:
+```python
+import torchvision.transforms.functional as F_t
+```
+
 
 ## Dataset
 We use the audio - image corresponding datasets here:
