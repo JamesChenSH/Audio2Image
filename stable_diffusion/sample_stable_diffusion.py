@@ -1,5 +1,5 @@
-import os
-os.environ['HF_HOME'] = './cache/'
+import os, sys
+os.environ['HF_HOME'] = '../cache/'
 
 from diffusers import StableDiffusionPipeline, EulerDiscreteScheduler, DDIMScheduler
 from matplotlib import pyplot as plt
@@ -13,6 +13,8 @@ import soundfile as sf
 import numpy as np
 
 from torch.amp import autocast
+
+sys.path.append('../')
 from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
 from PIL import Image
 
@@ -26,7 +28,7 @@ torch.cuda.manual_seed_all(42)
 
 if __name__ == "__main__":
     # Load the dataset
-    ds_path = "data/DS_airport_diffusion.pt"
+    ds_path = "../data/DS_airport_diffusion.pt"
     ds = torch.load(ds_path, weights_only=False)
     
     # Split Train, Val, Test
@@ -47,11 +49,17 @@ if __name__ == "__main__":
     audio_embedding_dim = 6144
     condition_embedding_dim = 1024
     conditional_unet = AudioConditionalUNet(pipe.unet, audio_embedding_dim, condition_embedding_dim).to('cuda')
-    conditional_unet.load_state_dict(torch.load('diffusion_models/conditional_unet.pth', weights_only=True))
+    conditional_unet.load_state_dict(torch.load('../diffusion_models/conditional_unet.pth', weights_only=True))
 
 
     # Sample
     audio_embedding = train.dataset.audio_data[0].unsqueeze(0)
     image = train.dataset.img_data[0]
     image.save(f'original_image.jpg')
-    generate_image_from_audio(audio_embedding, conditional_unet, pipe.vae, scheduler, 1000)
+    cond_embedding = conditional_unet.audio_conditioning(audio_embedding)
+    uncond_embedding = torch.zeros_like(cond_embedding)
+    pipe.unet = conditional_unet.unet
+
+    # pipe(prompt_embeds=cond_embedding, negative_prompt_embeds = uncond_embedding, height=256, width=256).images[0].save(f'generated_image.jpg')
+
+    generate_image_from_audio(audio_embedding, conditional_unet, pipe.vae, scheduler, 50)

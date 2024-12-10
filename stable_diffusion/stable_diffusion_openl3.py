@@ -1,5 +1,5 @@
-import os
-os.environ['HF_HOME'] = './cache/'
+import os, sys
+os.environ['HF_HOME'] = '../cache/'
 
 from diffusers import StableDiffusionPipeline, EulerDiscreteScheduler, DDIMScheduler
 from matplotlib import pyplot as plt
@@ -14,6 +14,8 @@ import soundfile as sf
 import numpy as np
 
 from torch.amp import autocast
+
+sys.path.append('../')
 from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
 from PIL import Image
 
@@ -82,13 +84,21 @@ def generate_image_from_text(pipe):
     device = "cuda"
     guidance_scale = 7.5  # @param
     num_inference_steps = 35  # @param
-    prompt = "A car hanging on a bridge"  # @param
-    negative_prompt = None  # @param
+    negative_prompt_embed = torch.zeros((1, 77, 1024)).to("cuda")
+    conditional_embed = torch.zeros((1, 77, 1024)).to("cuda")
+    prompt_embeds, uncond_embedding = pipe.encode_prompt(
+            None,
+            device,
+            1,
+            True,
+            prompt_embeds = conditional_embed,
+            negative_prompt_embeds = negative_prompt_embed
+        )
 
+    text_embeddings = torch.cat([uncond_embedding, prompt_embeds])
     # Encode the prompt
-    text_embeddings = pipe._encode_prompt(prompt, device, 1, True, negative_prompt)
-    print(text_embeddings)
-    print(text_embeddings.shape)
+    # text_embeddings = pipe._encode_prompt(prompt, device, 1, True, negative_prompt)
+
     # Create our random starting point
     latents = torch.randn((1, 4, 32, 32), device=device, generator=GENERATOR)
     latents *= pipe.scheduler.init_noise_sigma
@@ -101,7 +111,6 @@ def generate_image_from_text(pipe):
 
         # Expand the latents if we are doing classifier free guidance
         latent_model_input = torch.cat([latents] * 2)
-        print(latent_model_input.shape)
         # Apply any scaling required by the scheduler
         latent_model_input = pipe.scheduler.scale_model_input(latent_model_input, t)
 
@@ -208,17 +217,17 @@ if __name__ == "__main__":
     }
 
     # Load the dataset
-    ds_path = "data/DS_diffusion.pt"
-    ds = torch.load(ds_path, weights_only=False)
+    # ds_path = "data/DS_diffusion.pt"
+    # ds = torch.load(ds_path, weights_only=False)
     
     # Split Train, Val, Test
-    train_size = int(config['train ratio']*len(ds))
-    val_size = len(ds) - train_size
+    # train_size = int(config['train ratio']*len(ds))
+    # val_size = len(ds) - train_size
     
-    train, val = torch.utils.data.random_split(ds, [train_size, val_size])
-    # train = Subset(train, range(1))
-    train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
-    val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)   
+    # train, val = torch.utils.data.random_split(ds, [train_size, val_size])
+    # # train = Subset(train, range(1))
+    # train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
+    # val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)   
 
     '''
     ========================= Model Additional Layers =========================
@@ -236,7 +245,11 @@ if __name__ == "__main__":
     # audio_embedding = val.dataset.audio_data[0]
     # print(scheduler.num_train_timesteps)
     # generate_image_from_audio(audio_embedding, conditional_unet, vae, scheduler)
-    # exit()
+    # generate_image_from_text(pipe)
+    negative_prompt = torch.zeros((1, 77, 1024)).to("cuda")
+    conditional_embed = torch.zeros((1, 77, 1024)).to("cuda")
+    pipe(prompt_embeds=conditional_embed, negative_prompt_embeds = negative_prompt).images[0].save("cat_forest.jpg")
+    exit()   
     '''
     ========================= Model Training =========================
     '''

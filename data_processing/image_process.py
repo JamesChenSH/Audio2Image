@@ -170,7 +170,7 @@ def big_rgb_tensor():
     print("Total tensors loaded:", count)
 
 
-def convert_image_to_dataset(img_data_path, dataset_path):
+def convert_image_to_dataset(img_data_path, dataset_path, rgb=False):
     count = 0
     img_tensor_list = []
         # Get and sort all subfolders in the root folder
@@ -179,9 +179,9 @@ def convert_image_to_dataset(img_data_path, dataset_path):
 
     for subfolder in subfolders:
         print(f"Reading files from: {subfolder}")
-        if (subfolder != "data/image_original\\airport"):
-            print("skipping")
-            continue
+        # if (subfolder != "data/image_original\\airport"):
+        #     print("skipping")
+        #     continue
 
         # Get and sort all files in the current subfolder
         files = [f.path for f in os.scandir(subfolder) if f.is_file()]
@@ -193,13 +193,25 @@ def convert_image_to_dataset(img_data_path, dataset_path):
                 continue
             # Iterate through images
             # file_path = os.path.join(dirpath, filename)
-            # load grayscale image
-            image = Image.open(file).convert("L")
-            # resize
-            image = image.resize((32, 32))
-            # convert to tensor
-            transform = transforms.ToTensor()
-            img_tensor = transform(image)
+            if rgb:
+                image = Image.open(file).convert("RGB")
+
+                image = image.resize((32, 32))
+                transform = transforms.ToTensor()
+                img_tensor = transform(image)  # Shape: [3, H, W]
+                
+                # Permute to [H, W, 3] and reshape to [H, 3*W]
+                img_tensor = img_tensor.permute(1, 2, 0)  # Shape: [H, W, 3]
+                h, w, c = img_tensor.shape
+                img_tensor = img_tensor.reshape(h, c * w)  # Shape: [H, 3W]
+            else:
+                # load grayscale image  
+                image = Image.open(file).convert("L")
+                # resize
+                image = image.resize((32, 32))
+                # convert to tensor
+                transform = transforms.ToTensor()
+                img_tensor = transform(image)
             # append to list
             img_tensor = img_tensor.flatten()
             img_tensor_list.append(img_tensor.unsqueeze(dim=0))
@@ -220,7 +232,7 @@ if __name__ == "__main__":
     # dimension_reduce()
     # big_gs_tensor()
     # big_rgb_tensor()
-    convert_image_to_dataset("data/image_original", "data/image_airport_tensor.pt")
-    
+    # convert_image_to_dataset("data/image_original", "data/image_tensor.pt")
+    convert_image_to_dataset("data/image_original", "data/image_tensor_rgb.pt", True)    
 
     #print(torch.load("data/DS_vision_gs1.pt"))

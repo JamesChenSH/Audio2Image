@@ -8,6 +8,7 @@ from torch.utils.data import Dataset, Subset
 from torchvision import transforms
 from PIL import Image
 
+from tqdm import tqdm
 from datasets import load_dataset
     
 
@@ -30,13 +31,14 @@ class AudioImageDataset_Diffusion(Dataset):
         subfolders.sort()  # Sorting subfolders in lexicographical order
 
         for subfolder in subfolders:
+            print(f"Reading files from: {subfolder}")
             if (subset_path is not None) and (subfolder != subset_path):
                 print("skipping")
                 continue
             files = [f.path for f in os.scandir(subfolder) if f.is_file()]
             files.sort()  # Sorting files in lexicographical order
             
-            for file in files:
+            for file in tqdm(files):
                 if os.path.basename(file) == ".DS_Store":
                     continue
                 self.img_data.append(Image.open(file).convert("RGB"))
@@ -90,6 +92,6 @@ if __name__ == "__main__":
 
     data_path_base = os.path.join("data")
     
-    name_audio_ds = "audio_train_station_tensor_embed.pt"
+    name_audio_ds = "audio_tensor_embed.pt"
     
     build_dataset(data_path_base, name_audio_ds, 'data/image_original', "DS_diffusion.pt")
