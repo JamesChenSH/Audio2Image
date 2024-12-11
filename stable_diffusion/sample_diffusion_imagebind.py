@@ -2,6 +2,7 @@ import os, sys
 os.environ['HF_HOME'] = '../cache/'
 
 from diffusers import StableDiffusionPipeline, EulerDiscreteScheduler, DDIMScheduler, StableDiffusionImg2ImgPipeline, StableUnCLIPImg2ImgPipeline
+from diffusers import UNet2DConditionModel
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
@@ -105,8 +106,7 @@ if __name__ == "__main__":
     # train, val = torch.utils.data.random_split(ds, [train_size, val_size])
     # train = Subset(train, range(1))
 
-    # load model
-    # OverallDiffusion
+    # load diffsion model
     model_id = "stabilityai/stable-diffusion-2-1-unclip"
     scheduler = EulerDiscreteScheduler.from_pretrained(model_id, subfolder="scheduler")
     pipe = StableUnCLIPImg2ImgPipeline.from_pretrained(model_id, scheduler=scheduler)
@@ -124,7 +124,11 @@ if __name__ == "__main__":
     image_embedding = imagebind_model.forward({
         ModalityType.AUDIO: audio_tokenized
     })[ModalityType.AUDIO]
-
+    # Free imagebind from GPU to save VRAM
+    imagebind_model.detach()
+    
+    # Load our fine-tuned Unet
+    pipe.unet.load_state_dict(torch.load('../stable_diffusion/ib_unet.pth', weights_only=True))
     # image_embedding = torch.zeros_like(image_embedding)
     pipe(prompt_embeds=cond_embedding, negative_prompt_embeds = uncond_embedding, height=256, width=256, image_embeds=image_embedding).images[0].save(f'generated_image.jpg')
     # generate_image_from_audio(audio_tokenized, pipe, imagebind_model, scheduler, 50)

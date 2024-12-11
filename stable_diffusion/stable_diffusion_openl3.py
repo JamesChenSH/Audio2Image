@@ -217,17 +217,17 @@ if __name__ == "__main__":
     }
 
     # Load the dataset
-    # ds_path = "data/DS_diffusion.pt"
-    # ds = torch.load(ds_path, weights_only=False)
+    ds_path = "data/DS_diffusion.pt"
+    ds = torch.load(ds_path, weights_only=False)
     
     # Split Train, Val, Test
-    # train_size = int(config['train ratio']*len(ds))
-    # val_size = len(ds) - train_size
+    train_size = int(config['train ratio']*len(ds))
+    val_size = len(ds) - train_size
     
-    # train, val = torch.utils.data.random_split(ds, [train_size, val_size])
-    # # train = Subset(train, range(1))
-    # train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
-    # val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)   
+    train, val = torch.utils.data.random_split(ds, [train_size, val_size])
+    # train = Subset(train, range(1))
+    train_dataloader = torch.utils.data.DataLoader(train, batch_size=config['batch size'], shuffle=True)
+    val_dataloader = torch.utils.data.DataLoader(val, batch_size=config['batch size'], shuffle=True)   
 
     '''
     ========================= Model Additional Layers =========================

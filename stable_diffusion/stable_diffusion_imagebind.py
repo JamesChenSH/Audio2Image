@@ -51,14 +51,14 @@ if __name__ == "__main__":
         'validation ratio': 0.1,
         'device': 'cuda',
         'epochs': 280,
-        'unet_lr': 1e-5,
+        'unet_lr': 1e-6,
 
         'condition_embedding_dim': 1024
     }
 
     device = config['device']
 
-    # Load the dataset
+    # Load the dataset 
     ds_path = "../data/DS_ib.pt"
     ds = torch.load(ds_path, weights_only=False)
 
