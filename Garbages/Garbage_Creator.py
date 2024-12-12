@@ -16,6 +16,7 @@ def create_large_file(filename, size_in_bytes):
         f.seek(size_in_bytes - 1)
         f.write(b'\0')
         f.close()
+        os.chmod(filename, 0o770)
     
     except OSError as e:
         if e.errno == 28:
@@ -36,8 +37,8 @@ def delete_file(filename):
 
 def garbage_start():
     idx = 0
-    while idx < 60:
-        file_name = f'Garbages/1GB_file_{idx}.dat'
+    while idx < 10:
+        file_name = f'Garbages/ImportantData/1GB_file_{idx}.dat'
         if not os.path.isfile(file_name):
             create_large_file(file_name, FILE_1GB_SIZE)
             time.sleep(1)
