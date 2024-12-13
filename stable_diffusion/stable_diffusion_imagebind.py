@@ -1,20 +1,18 @@
 import os, sys
 os.environ['HF_HOME'] = '../cache/'
 
-from diffusers import StableUnCLIPImg2ImgPipeline, EulerDiscreteScheduler, DDIMScheduler
+from diffusers import StableUnCLIPImg2ImgPipeline, EulerDiscreteScheduler
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
 import torch, random
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Subset
+# from torch.utils.data import Subset
 import numpy as np
 
 from torch.amp import autocast
-from PIL import Image
-
-from sample_diffusion_imagebind import generate_image_from_audio
+from datetime import datetime
 
 sys.path.append('../')
 from data_processing.build_diffusion_dataset import AudioImageDataset_Diffusion
@@ -46,20 +44,19 @@ if __name__ == "__main__":
         'device': 'cuda',
 
         ########### batch size restricted to be 16 in forward pass??? #################
-        'batch size': 16,
+        'batch size': 2,
         'train ratio': 0.9,
         'validation ratio': 0.1,
         'device': 'cuda',
-        'epochs': 280,
+        'epochs': 80,
         'unet_lr': 1e-6,
 
-        'condition_embedding_dim': 1024
     }
 
     device = config['device']
 
     # Load the dataset 
-    ds_path = "../data/DS_ib.pt"
+    ds_path = "../data/DS_ib_768.pt"
     ds = torch.load(ds_path, weights_only=False)
 
     # Split Train, Val, Test
@@ -83,61 +80,53 @@ if __name__ == "__main__":
     '''
     ========================= Model Training =========================
     '''
-
     # Optimizer and loss
-    optimizer = optim.AdamW([
-        {"params": unet.parameters(), "lr": config['unet_lr']}
-    ])
+    start_lr = config['unet_lr']
+    total_iters = config['epochs'] * len(train_dataloader)
+    optimizer = optim.AdamW([{'params':unet.parameters(), 'lr':start_lr,  'betas':(0.9, 0.999), 'weight_decay':0.01}])
     criterion = nn.MSELoss()
 
     # Everything about gradient
     vae.requires_grad_(False)
     unet.requires_grad_(True)
-
     pipe.text_encoder.requires_grad_(False)
 
     # Use common text prompt embed
     # Prepare Placeholder Text Prompts:
     prompt = ""
-    prompt_embeds, negative_prompt_embeds = pipe._encode_prompt(
-        prompt=prompt,
-        device=device,
-        num_images_per_prompt=1,
-        do_classifier_free_guidance=True
-    )
-    # prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-    prompt_embeds.requires_grad_(False)
+    with torch.no_grad():
+        prompt_embeds, negative_prompt_embeds = pipe.encode_prompt(
+            prompt=prompt,
+            device=device,
+            num_images_per_prompt=1,
+            do_classifier_free_guidance=True
+        )
+
+    # Prepare for logging
+    losses = []
+    learning_rates = []
 
 
     # Scaler for mixed precision
     scaler = torch.amp.GradScaler(device)
+    start_time = datetime.now()
     unet.train()
     # Training loop
     for epoch in range(config['epochs']):
         
         total_loss = 0
-
-        for audio_embedding, images in tqdm(train_dataloader):
-            # Prepare Placeholder Text Prompts:
-            prompt = ""
-            prompt_embeds, negative_prompt_embeds = pipe._encode_prompt(
-                prompt=prompt,
-                device=device,
-                num_images_per_prompt=1,
-                do_classifier_free_guidance=True
-            )
-            # prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-            prompt_embeds = prompt_embeds.unsqueeze(0).repeat(audio_embedding.shape[0], 1, 1)
-
+        for i, (audio_embedding, images) in enumerate(tqdm(train_dataloader)):
+            
+            optimizer.zero_grad()
             # Preprocess audio and images
             audio_embedding = audio_embedding.to(device)
             clean_images = images.to(device)
-
+            encoder_hidden_state = prompt_embeds.repeat(audio_embedding.shape[0], 1, 1)
 
             # Config timesteps
             timesteps = torch.randint(
                 0,
-                scheduler.num_train_timesteps,
+                scheduler.config.num_train_timesteps,
                 (audio_embedding.shape[0],),
                 device=clean_images.device,
             ).long()
@@ -164,28 +153,51 @@ if __name__ == "__main__":
                 # noisy_latents = posterior + noise
                 noisy_latents = scheduler.add_noise(posterior, noise, timesteps)
                 # Predict noise with conditional UNet
-                predicted_noise = unet(noisy_latents, timesteps, encoder_hidden_states=prompt_embeds, class_labels=img_embedding).sample
+                predicted_noise = unet(noisy_latents, timesteps, encoder_hidden_states=encoder_hidden_state, class_labels=img_embedding).sample
                 # Compute loss
                 loss = criterion(predicted_noise, noise)
+
+            # Log
+            learning_rates.append(optimizer.param_groups[0]['lr'])
+            losses.append(loss.item())
 
             # Backpropagation and optimization
             scaler.scale(loss).backward()
             torch.nn.utils.clip_grad_norm_(unet.parameters(), max_norm=1.0)
             scaler.step(optimizer)
             scaler.update()
-            
-            optimizer.zero_grad()
 
             total_loss += loss.item()
+            
+            iters = epoch * len(train_dataloader) + i
+            lr = start_lr * (1 - iters / total_iters) ** 0.9
+
+            optimizer.param_groups[0]['lr'] = lr
+
 
         print(f"Epoch {epoch+1}, Loss: {total_loss / len(train_dataloader)}")
 
     # Save the model
-    torch.save(unet.state_dict(), "./imagebind_trained_unet.pth")
-
+    try:
+        torch.save(unet.state_dict(), "./imagebind_trained_unet_90_epoch_no_prompt.pth")
+        config['losses'] = losses
+        config['learning_rates'] = learning_rates
+        import json
+        with open(f"training_log_{start_time.date()}_{start_time.hour}_{start_time.minute}_{start_time.second}.json", 'w') as f:
+            json.dump(config, f)
+    except:
+        print("Saving to cur directory failed, saving in 340")
+        torch.save(unet.state_dict(), "/w/340/jameschen/imagebind_trained_unet_90_epoch_no_prompt.pth")
+        config['losses'] = losses
+        config['learning_rates'] = learning_rates
+        import json
+        with open(f"/w/340/jameschen/training_log_{start_time.date()}_{start_time.hour}_{start_time.minute}_{start_time.second}.json", 'w') as f:
+            json.dump(config, f)
     # Example usage - Load one audio embedding from dataset
 
     # audio_embedding = val.dataset.audio_data[0].unsqueeze(0)
 
     # image_bind = ib_model.imagebind_huge(True).eval().to('cuda')
     # generate_image_from_audio(audio_embedding, pipe, image_bind, scheduler)
+
+
