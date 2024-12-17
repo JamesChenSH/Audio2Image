@@ -40,7 +40,12 @@ if __name__ == "__main__":
     imagebind_model = ib_model.imagebind_huge(pretrained=True).eval().to('cuda')
 
     # audio_sample_path = ["../data/sound/train station/08976_1.wav"]
-    audio_sample_path = ["../data/sound/train station/08976_1.wav"]
+    # audio_sample_path = ["../data/sound/airport/01155.wav"]
+    # audio_sample_path = ["../data/sound/sports land/00185_7.wav"]
+    # audio_sample_path = ["../data/sound/harbour/07438_3.wav"]
+    # audio_sample_path = ["../data/sound/residential/00319.wav"]
+    audio_sample_path = ["../data/sound/forest/01236.wav"]
+    
     audio_tokenized = ib_data.load_and_transform_audio_data(audio_sample_path, 'cuda')
 
     # Sample
