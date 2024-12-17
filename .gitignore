@@ -16,3 +16,4 @@ model/checkpoint_last_epoch_99_loss5.29092_2024_11_29.pt
 cache/
 *.pth
 model_*.json
+/output_images

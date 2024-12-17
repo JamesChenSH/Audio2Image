@@ -24,7 +24,8 @@ torch.cuda.manual_seed_all(42)
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--fine_tuned", action="store_true")
+    parser.add_argument("--SounDiff_S", action="store_true")
+    parser.add_argument("--SounDiff_F", action="store_true")
     parser.add_argument("--prompted", action="store_true")
 
     args = parser.parse_args()
@@ -38,7 +39,8 @@ if __name__ == "__main__":
 
     imagebind_model = ib_model.imagebind_huge(pretrained=True).eval().to('cuda')
 
-    audio_sample_path = ["../data/sound/train station/04789_1.wav"]
+    # audio_sample_path = ["../data/sound/train station/08976_1.wav"]
+    audio_sample_path = ["../data/sound/train station/08976_1.wav"]
     audio_tokenized = ib_data.load_and_transform_audio_data(audio_sample_path, 'cuda')
 
     # Sample
@@ -54,14 +56,18 @@ if __name__ == "__main__":
     imagebind_model.to('cpu')
     
     audio_file_name = audio_sample_path[0].split('/')[-1].split('.')[0]
-    img_out_path = f"../output_images/new_768_{audio_file_name}_"
-
+    img_out_path = f"../output_images/{audio_file_name}_"
+    resolution = 768
+    
     # Load our fine-tuned Unet
-    if args.fine_tuned:
-        # pipe.unet.load_state_dict(torch.load('../stable_diffusion/imagebind_trained_unet_with_prompt.pth', weights_only=True))
-        pipe.unet.load_state_dict(torch.load('../stable_diffusion/imagebind_trained_unet_90_epoch_no_prompt.pth', weights_only=True))
-        img_out_path = img_out_path + "fine_tuned_"
+    if args.SounDiff_S:
+        pipe.unet.load_state_dict(torch.load('../stable_diffusion/SounDiff_S_unet_280_epoch_with_prompt_trainstation.pth', weights_only=True))
+        img_out_path = img_out_path + "SounDiff_S_"
+    elif args.SounDiff_F:
+        pipe.unet.load_state_dict(torch.load('../stable_diffusion/SounDiff_F_unet_90_epoch_no_prompt.pth', weights_only=True))
+        img_out_path = img_out_path + "SounDiff_F_"
     # Check prompted or not
+    img_out_path = img_out_path + str(resolution) + "_"
     if args.prompted:
         img_out_path = img_out_path + "prompted.jpg"
         pipe(
@@ -71,11 +77,12 @@ if __name__ == "__main__":
             image_embeds=image_embedding
         ).images[0].save(img_out_path)
     else:
-        img_out_path = img_out_path + "non_prompted.jpg"
+        img_out_path = img_out_path + ".jpg"
         pipe(
             prompt_embeds=cond_embedding, 
             negative_prompt_embeds=uncond_embedding, 
-            height=768, width=768, 
-            image_embeds=image_embedding
+            height=resolution, width=resolution, 
+            image_embeds=image_embedding,
+            num_inference_steps=35
         ).images[0].save(img_out_path)
     # generate_image_from_audio(audio_tokenized, pipe, imagebind_model, scheduler, 50)
