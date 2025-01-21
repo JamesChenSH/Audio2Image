@@ -29,6 +29,18 @@ You can also use `--prompted` argument to add "satellite image" prompt to the mo
 The output images are in the `/output_images/` folder.
 
 
+## Artifacts
+The unused researches done with pre-defined transformer and iGPT are located in
+`/unused_research/` folder. Other than that, an experimental transformer imlementation
+for this task is included in this repo, with these files:
+```
+/model
+    model_layers.py     # Base Architecture
+main.py                 # For transformer training
+example.py              # For transformer inference
+```
+
+
 ## Method to use Slurm Cluster
 After ssh into comps0.cs.toronto.edu from cs.toronto.edu, run:
 
