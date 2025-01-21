@@ -1,9 +1,6 @@
 # Audio2Image
 This is the course project for CSC2541 Generative AI in Machine Learning at University of Toronto
 
-## Venv
-Currently using venv in /w/246
-
 ## Environment Setup
 ```
 pip install -r requirements.txt
@@ -20,6 +17,17 @@ import torchvision.transforms.functional as F_t
 ## Dataset
 We use the audio - image corresponding datasets here:
 https://zenodo.org/records/3828124
+
+
+## Getting Started
+To have a sample of an image from the model we arrived at for final project, run 
+```
+python stable_diffusion\sample_diffusion_imagebind.py
+```
+You may add arguments `--[SounDiff_S, SounDiff_F]` to select which model to use.
+You can also use `--prompted` argument to add "satellite image" prompt to the model.
+The output images are in the `/output_images/` folder.
+
 
 ## Method to use Slurm Cluster
 After ssh into comps0.cs.toronto.edu from cs.toronto.edu, run:
@@ -49,6 +57,3 @@ To re-mount the terminal:
 ```
 tmux attach -t <termial name>
 ```
-
-'''
-drives used: 247-james, 284-james, 284-jerry, 331-eric, 246-jerry
