@@ -17,3 +17,6 @@ cache/
 *.pth
 model_*.json
 /output_images
+*/*.json
+*.jpg
+*.png
